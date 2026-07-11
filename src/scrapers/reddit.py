@@ -11,6 +11,7 @@ from typing import Any, List, Optional, cast
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from .base import BaseScraper
 from ..models import (
@@ -41,6 +42,18 @@ MAX_COMMENT_CONCURRENCY = 2
 
 class RedditBlockedError(Exception):
     """Raised when Reddit blocks an unauthenticated JSON listing request."""
+
+
+class RedditRateLimitError(Exception):
+    """Raised when Reddit returns 429 Too Many Requests."""
+
+    def __init__(self, retry_after: int = 5):
+        self.retry_after = retry_after
+        super().__init__(f"Rate limited, retry after {retry_after}s")
+
+
+def _is_rate_limit(exc: BaseException) -> bool:
+    return isinstance(exc, RedditRateLimitError)
 
 
 class RedditScraper(BaseScraper):
@@ -496,6 +509,12 @@ class RedditScraper(BaseScraper):
             },
         )
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=2, max=30),
+        retry=retry_if_exception(_is_rate_limit),
+        reraise=True,
+    )
     async def _reddit_get(self, url: str, params: dict) -> Optional[Any]:
         try:
             response = await self.client.get(
@@ -507,13 +526,7 @@ class RedditScraper(BaseScraper):
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", 5))
                 logger.warning("Reddit rate limited, retrying after %ds", retry_after)
-                await asyncio.sleep(retry_after)
-                response = await self.client.get(
-                    url,
-                    params=params,
-                    headers=REDDIT_HEADERS,
-                    follow_redirects=True,
-                )
+                raise RedditRateLimitError(retry_after)
             if response.status_code == 403 and "/comments/" in url:
                 logger.info(
                     "Reddit blocked comments request for %s; continuing without comments",
@@ -524,7 +537,7 @@ class RedditScraper(BaseScraper):
                 raise RedditBlockedError(url)
             response.raise_for_status()
             return response.json()
-        except RedditBlockedError:
+        except (RedditBlockedError, RedditRateLimitError):
             raise
         except httpx.HTTPError as e:
             logger.warning("Reddit request failed for %s: %s", url, e)

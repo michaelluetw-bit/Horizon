@@ -45,8 +45,9 @@ class ContentAnalyzer:
         throttle_sec = self._get_throttle_sec()
         concurrency = self._get_concurrency()
         semaphore = asyncio.Semaphore(concurrency)
+        throttle_lock = asyncio.Lock()
 
-        async def _process(item: ContentItem, index: int, progress_task) -> ContentItem:
+        async def _process(item: ContentItem, progress_task) -> ContentItem:
             async with semaphore:
                 try:
                     await self._analyze_item(item)
@@ -55,7 +56,8 @@ class ContentAnalyzer:
                     item.ai_score = 0.0
                     item.ai_reason = "Analysis failed"
                     item.ai_summary = item.title
-                if throttle_sec > 0 and index < len(items) - 1:
+            if throttle_sec > 0:
+                async with throttle_lock:
                     await asyncio.sleep(throttle_sec)
             progress.advance(progress_task)
             return item
@@ -69,7 +71,7 @@ class ContentAnalyzer:
         ) as progress:
             task = progress.add_task("Analyzing", total=len(items))
             coros = [
-                _process(item, i, task) for i, item in enumerate(items)
+                _process(item, task) for item in items
             ]
             analyzed_items = await asyncio.gather(*coros)
 

@@ -4,6 +4,7 @@ import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, Dict, Optional
 from urllib.parse import urlparse
 import httpx
@@ -148,8 +149,6 @@ class HorizonOrchestrator:
 
                 # Copy to docs/ for GitHub Pages
                 try:
-                    from pathlib import Path
-
                     post_filename = f"{today}-summary-{lang}.md"
                     posts_dir = Path("docs/_posts")
                     posts_dir.mkdir(parents=True, exist_ok=True)
@@ -246,7 +245,8 @@ class HorizonOrchestrator:
         Returns:
             List[ContentItem]: All fetched items
         """
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        limits = httpx.Limits(max_connections=50, max_keepalive_connections=10)
+        async with httpx.AsyncClient(timeout=30.0, limits=limits) as client:
             tasks = []
 
             # GitHub sources

@@ -54,7 +54,7 @@ def test_analyze_batch_sleeps_between_items_when_throttle_configured(monkeypatch
 
     asyncio.run(analyzer.analyze_batch(items))
 
-    assert sleep_calls == [1.5, 1.5]
+    assert sleep_calls == [1.5, 1.5, 1.5]
 
 
 def test_analyze_batch_concurrent_processing(monkeypatch):

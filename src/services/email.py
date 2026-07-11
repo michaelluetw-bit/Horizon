@@ -5,6 +5,7 @@ import html
 import imaplib
 import logging
 import os
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -19,7 +20,26 @@ except ImportError:
 from ..ai.markdown_utils import clean_app_summary_markdown
 from ..models import EmailConfig
 
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+_NO_REPLY_PATTERNS = re.compile(
+    r"(noreply|no-reply|donotreply|do-not-reply|mailer-daemon|postmaster|nobody|"
+    r"automated|automaton|bounce|returns|noreponse)",
+    re.IGNORECASE,
+)
+
+_MAX_SUBSCRIBERS = 500
+
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_subscriber_email(addr: str) -> bool:
+    """Validate that an email address is a real subscriber (not automated)."""
+    if not _EMAIL_RE.match(addr):
+        return False
+    if _NO_REPLY_PATTERNS.search(addr):
+        return False
+    return True
 
 
 class EmailManager:
@@ -62,7 +82,8 @@ class EmailManager:
             mail.select("INBOX")
 
             keyword = self.config.subscribe_keyword
-            search_crit = f'(UNSEEN SUBJECT "{keyword}")'
+            safe_keyword = keyword.replace("\\", "\\\\").replace('"', '\\"')
+            search_crit = f'(UNSEEN SUBJECT "{safe_keyword}")'
 
             status, messages = mail.search(None, search_crit)
 
@@ -84,11 +105,12 @@ class EmailManager:
 
                             if sender:
                                 _, email_addr = parseaddr(sender)
-                                if email_addr and "@" in email_addr:
-                                    if (
-                                        "noreply" in email_addr.lower()
-                                        or "no-reply" in email_addr.lower()
-                                    ):
+                                if email_addr and _is_valid_subscriber_email(email_addr):
+                                    if len(subscribers) >= _MAX_SUBSCRIBERS:
+                                        logger.warning(
+                                            "Max subscriber limit (%d) reached, skipping %s",
+                                            _MAX_SUBSCRIBERS, email_addr,
+                                        )
                                         continue
 
                                     if email_addr not in subscribers:
@@ -104,7 +126,8 @@ class EmailManager:
                                         logger.info(f"Already subscribed: {email_addr}")
 
             unsub_keyword = self.config.unsubscribe_keyword
-            search_crit_unsub = f'(UNSEEN SUBJECT "{unsub_keyword}")'
+            safe_unsub_keyword = unsub_keyword.replace("\\", "\\\\").replace('"', '\\"')
+            search_crit_unsub = f'(UNSEEN SUBJECT "{safe_unsub_keyword}")'
 
             status, messages = mail.search(None, search_crit_unsub)
 
@@ -126,13 +149,7 @@ class EmailManager:
 
                             if sender:
                                 _, email_addr = parseaddr(sender)
-                                if email_addr and "@" in email_addr:
-                                    if (
-                                        "noreply" in email_addr.lower()
-                                        or "no-reply" in email_addr.lower()
-                                    ):
-                                        continue
-
+                                if email_addr and _is_valid_subscriber_email(email_addr):
                                     if email_addr in subscribers:
                                         storage_manager.remove_subscriber(email_addr)
                                         subscribers = storage_manager.load_subscribers()

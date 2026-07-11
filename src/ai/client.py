@@ -620,11 +620,11 @@ class ChainedAIClient(AIClient):
     def _should_fallback(exc: Exception) -> bool:
         """Determine if an error warrants fallback to the next provider."""
         msg = str(exc).lower()
-        if "429" in msg or "rate limit" in msg:
+        if re.search(r"\b429\b", msg) or "rate limit" in msg:
             return True
-        if "401" in msg or "403" in msg or "quota" in msg or "exceeded" in msg:
+        if re.search(r"\b40[13]\b", msg) or "quota" in msg or "exceeded" in msg:
             return True
-        if "502" in msg or "503" in msg or "service unavailable" in msg:
+        if re.search(r"\b50[23]\b", msg) or "service unavailable" in msg:
             return True
         if "empty response" in msg:
             return True

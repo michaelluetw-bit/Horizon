@@ -16,6 +16,10 @@ COPY .env.example .env.example
 # Install dependencies
 RUN uv sync --frozen --no-dev
 
+# Create non-root user for security
+RUN useradd -m -r appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Create volume mount points
 VOLUME ["/app/data"]
 
