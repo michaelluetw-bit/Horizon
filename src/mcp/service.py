@@ -402,28 +402,22 @@ class HorizonPipelineService:
         if not items:
             raise HorizonMcpError(code="HZ_EMPTY_INPUT", message="No items available for enrichment.")
 
-        ai_client = ctx.runtime.create_ai_client(ctx.config.ai)
-        enricher = ctx.runtime.ContentEnricher(ai_client)
-        await enricher.enrich_batch(items)
-
+        # Second-pass enrichment is disabled, save directly to maintain pipeline compatibility
         self.run_store.save_items(run_id, "enriched", items_to_dicts(items))
-
-        citation_count = 0
-        for item in items:
-            citation_count += len(item.metadata.get("sources", []))
 
         meta = self.run_store.update_meta(
             run_id,
             {
                 "enriched_count": len(items),
-                "citation_count": citation_count,
+                "citation_count": 0,
+                "enrichment_skipped": True,
             },
         )
 
         return {
             "run_id": run_id,
             "enriched": len(items),
-            "citation_count": citation_count,
+            "citation_count": 0,
             "artifact": str((self.run_store.run_dir(run_id) / "enriched_items.json").resolve()),
             "meta": meta,
         }
@@ -492,7 +486,7 @@ class HorizonPipelineService:
         horizon_path: str | None = None,
         config_path: str | None = None,
         sources: list[str] | None = None,
-        enrich: bool = True,
+        enrich: bool = False,
         topic_dedup: bool = True,
         save_to_horizon_data: bool = False,
     ) -> dict[str, Any]:

@@ -266,7 +266,7 @@ async def hz_run_pipeline(
     horizon_path: str | None = None,
     config_path: str | None = None,
     sources: list[str] | None = None,
-    enrich: bool = True,
+    enrich: bool = False,
     topic_dedup: bool = True,
     save_to_horizon_data: bool = False,
 ) -> dict[str, Any]:

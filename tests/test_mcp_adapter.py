@@ -82,7 +82,7 @@ def test_load_config_expands_env_vars(tmp_path: Path, monkeypatch) -> None:
     assert config.ai.base_url == "https://api.example.com/v1"
 
 
-def test_apply_source_filter_handles_twitter_and_openbb() -> None:
+def test_apply_source_filter_handles_github_and_openbb() -> None:
     config = Config.model_validate(
         {
             "ai": {
@@ -91,7 +91,7 @@ def test_apply_source_filter_handles_twitter_and_openbb() -> None:
                 "api_key_env": "OPENAI_API_KEY",
             },
             "sources": {
-                "twitter": {"enabled": True, "users": ["openai"]},
+                "github": [{"type": "user_events", "username": "openai"}],
                 "openbb": {
                     "enabled": True,
                     "watchlists": [{"name": "ai", "symbols": ["NVDA"]}],
@@ -101,10 +101,10 @@ def test_apply_source_filter_handles_twitter_and_openbb() -> None:
         }
     )
 
-    filtered, chosen, unknown = apply_source_filter(config, ["twitter"])
+    filtered, chosen, unknown = apply_source_filter(config, ["github"])
 
-    assert chosen == ["twitter"]
+    assert chosen == ["github"]
     assert unknown == []
-    assert filtered.sources.twitter.enabled is True
+    assert len(filtered.sources.github) == 1
     assert filtered.sources.openbb.enabled is False
     assert filtered.sources.openbb.watchlists == []

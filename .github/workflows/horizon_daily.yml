@@ -1,0 +1,53 @@
+name: Horizon Daily Aggregation
+
+on:
+  schedule:
+    - cron: '0 23 * * *'  # 每天 UTC 23:00 (台灣時間 7:00)
+  workflow_dispatch:      # 允許手動觸發測試
+
+permissions:
+  contents: write         # 授予推播變更回倉庫的寫入權限
+
+jobs:
+  aggregate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Run Horizon pipeline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+          PYTHONIOENCODING: 'utf-8'
+        run: |
+          uv run horizon --hours 24
+
+      - name: Commit and push changes
+        run: |
+          # 檢查是否有新生成的 summaries 或 posts
+          git status
+          if [ -n "$(git status --porcelain data/summaries docs/_posts)" ]; then
+            echo "偵測到新生成的快報，準備提交..."
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/summaries docs/_posts
+            git commit -m "docs: 雲端自動生成每日快報 [skip ci]"
+            git push origin main
+          else
+            echo "沒有新生成的快報需要提交。"
+          fi

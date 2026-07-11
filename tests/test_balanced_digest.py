@@ -142,7 +142,7 @@ def test_run_applies_balanced_digest_before_enrichment(tmp_path, monkeypatch) ->
             provider="openai",
             model="test",
             api_key_env="TEST_API_KEY",
-            languages=[],
+            languages=["en"],
         ),
         sources=SourcesConfig(),
         filtering=FilteringConfig(
@@ -155,13 +155,14 @@ def test_run_applies_balanced_digest_before_enrichment(tmp_path, monkeypatch) ->
         ),
     )
     storage = SimpleNamespace()
+    storage.save_daily_summary = lambda date, summary, language="en": "mock_path"
     orchestrator = HorizonOrchestrator(config, storage)
     items = [
         make_item("ai", 9.0, "ai"),
         make_item("finance", 8.0, "finance"),
         make_item("below-threshold", 6.0, "ai"),
     ]
-    enriched_ids: list[str] = []
+    summary_ids: list[str] = []
 
     async def fetch_all_sources(since):  # type: ignore[no-untyped-def]
         return items
@@ -172,19 +173,17 @@ def test_run_applies_balanced_digest_before_enrichment(tmp_path, monkeypatch) ->
     async def merge_topic_duplicates(input_items):  # type: ignore[no-untyped-def]
         return input_items
 
-    async def expand_twitter_discussion(input_items):  # type: ignore[no-untyped-def]
-        return None
+    async def generate_summary(self, items, date, total_fetched, language="en"):  # type: ignore[no-untyped-def]
+        summary_ids.extend(item.id for item in items)
+        return "mock summary"
 
-    async def enrich_important_items(input_items):  # type: ignore[no-untyped-def]
-        enriched_ids.extend(item.id for item in input_items)
-
+    from src.ai.summarizer import DailySummarizer
     monkeypatch.setattr(orchestrator, "fetch_all_sources", fetch_all_sources)
     monkeypatch.setattr(orchestrator, "_analyze_content", analyze_content)
     monkeypatch.setattr(orchestrator, "merge_topic_duplicates", merge_topic_duplicates)
-    monkeypatch.setattr(orchestrator, "_expand_twitter_discussion", expand_twitter_discussion)
-    monkeypatch.setattr(orchestrator, "_enrich_important_items", enrich_important_items)
+    monkeypatch.setattr(DailySummarizer, "generate_summary", generate_summary)
     monkeypatch.chdir(tmp_path)
 
     asyncio.run(orchestrator.run())
 
-    assert enriched_ids == ["ai"]
+    assert summary_ids == ["ai"]

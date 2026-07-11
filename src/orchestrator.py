@@ -18,8 +18,6 @@ from .scrapers.hackernews import HackerNewsScraper
 from .scrapers.rss import RSSScraper
 from .scrapers.reddit import RedditScraper
 from .scrapers.telegram import TelegramScraper
-from .scrapers.twitter import TwitterScraper
-from .scrapers.twitter_playwright import TwitterPlaywrightScraper
 from .scrapers.openbb import OpenBBScraper
 from .scrapers.ossinsight import OSSInsightScraper
 from .scrapers.gdelt import GDELTScraper
@@ -27,7 +25,6 @@ from .scrapers.google_news import GoogleNewsScraper
 from .ai.client import create_ai_client
 from .ai.analyzer import ContentAnalyzer
 from .ai.summarizer import DailySummarizer
-from .ai.enricher import ContentEnricher
 from .ai.tokens import get_usage_snapshot
 
 
@@ -126,10 +123,7 @@ class HorizonOrchestrator:
                 )
             important_items = deduped_items
 
-            # 5.6 Optional second-stage Twitter reply expansion + targeted re-analysis
-            await self._expand_twitter_discussion(important_items)
-
-            # 5.7 Apply per-category and global digest limits before enrichment
+            # 5.7 Apply per-category and global digest limits
             balanced_result = self.apply_balanced_digest(important_items)
             important_items = balanced_result.items
 
@@ -141,9 +135,6 @@ class HorizonOrchestrator:
             for source_key, count in sorted(selected_counts.items()):
                 self.console.print(f"      • {source_key}: {count}")
             self.console.print("")
-
-            # 6. Search related stories + enrich with background knowledge (2nd AI pass)
-            await self._enrich_important_items(important_items)
 
             # 7. Generate and save daily summaries for each configured language
             today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -283,14 +274,7 @@ class HorizonOrchestrator:
                 telegram_scraper = TelegramScraper(self.config.sources.telegram, client)
                 tasks.append(self._fetch_with_progress("Telegram", telegram_scraper, since))
 
-            # Twitter (Apify or Playwright mode)
-            if self.config.sources.twitter and self.config.sources.twitter.enabled:
-                tw_cfg = self.config.sources.twitter
-                if tw_cfg.mode == "playwright":
-                    twitter_scraper = TwitterPlaywrightScraper(tw_cfg)
-                else:
-                    twitter_scraper = TwitterScraper(tw_cfg, client)
-                tasks.append(self._fetch_with_progress("Twitter", twitter_scraper, since))
+
 
             # OpenBB (financial news / filings via the OpenBB Platform SDK)
             if self.config.sources.openbb and self.config.sources.openbb.enabled:
@@ -613,78 +597,7 @@ class HorizonOrchestrator:
             duplicate_categories=sorted(set(duplicate_categories)),
         )
 
-    async def _expand_twitter_discussion(self, items: List[ContentItem]) -> None:
-        """Second-stage: fetch reply text for important Twitter items and re-analyze.
 
-        Only runs when sources.twitter.fetch_reply_text is True.
-        Bounded by max_tweets_to_expand to control cost.
-        """
-        tw_cfg = self.config.sources.twitter
-        if not tw_cfg or not tw_cfg.enabled or not tw_cfg.fetch_reply_text:
-            return
-
-        from .models import SourceType
-
-        twitter_items = [
-            item for item in items
-            if item.source_type == SourceType.TWITTER
-        ][:tw_cfg.max_tweets_to_expand]
-
-        if not twitter_items:
-            return
-
-        self.console.print(
-            f"💬 Fetching reply text for {len(twitter_items)} Twitter items..."
-        )
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            if tw_cfg.mode == "playwright":
-                self.console.print(
-                    "   [yellow]Reply expansion not yet supported in Playwright mode.[/yellow]"
-                )
-                return
-            scraper = TwitterScraper(tw_cfg, client)
-            expanded = []
-            for item in twitter_items:
-                try:
-                    reply_lines = await scraper.fetch_replies_for_item(item)
-                    if TwitterScraper.append_discussion_content(item, reply_lines):
-                        expanded.append(item)
-                        self.console.print(
-                            f"   💬 {len(reply_lines)} replies added to: {item.title[:60]}"
-                        )
-                except Exception as exc:
-                    self.console.print(
-                        f"   [yellow]⚠️  Reply fetch failed for {item.id}: {exc}[/yellow]"
-                    )
-
-        if not expanded:
-            return
-
-        self.console.print(
-            f"   Re-analyzing {len(expanded)} Twitter items with reply context...\n"
-        )
-        ai_client = create_ai_client(self.config.ai)
-        analyzer = ContentAnalyzer(ai_client)
-        await analyzer.analyze_batch(expanded)
-
-    async def _enrich_important_items(self, items: List[ContentItem]) -> None:
-        """Enrich items with background knowledge (2nd AI pass).
-
-        For each item that passed the score threshold, call AI to generate
-        background knowledge based on the item's actual content.
-
-        Args:
-            items: Important items to enrich (modified in-place)
-        """
-        if not items:
-            return
-
-        self.console.print("📚 Enriching with background knowledge...")
-        ai_client = create_ai_client(self.config.ai)
-        enricher = ContentEnricher(ai_client)
-        await enricher.enrich_batch(items)
-        self.console.print(f"   Enriched {len(items)} items\n")
 
     async def _analyze_content(self, items: List[ContentItem]) -> List[ContentItem]:
         """Analyze content items with AI.

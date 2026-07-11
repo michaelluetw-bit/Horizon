@@ -22,7 +22,6 @@ VALID_SOURCES = {
     "rss",
     "reddit",
     "telegram",
-    "twitter",
     "openbb",
 }
 ENV_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -129,7 +128,6 @@ def load_runtime(horizon_path: Path) -> HorizonRuntime:
         orchestrator = importlib.import_module("src.orchestrator")
         ai_client = importlib.import_module("src.ai.client")
         analyzer = importlib.import_module("src.ai.analyzer")
-        enricher = importlib.import_module("src.ai.enricher")
         summarizer = importlib.import_module("src.ai.summarizer")
     except Exception as exc:  # pragma: no cover - import failure edge case
         raise HorizonMcpError(
@@ -146,7 +144,7 @@ def load_runtime(horizon_path: Path) -> HorizonRuntime:
         HorizonOrchestrator=orchestrator.HorizonOrchestrator,
         create_ai_client=ai_client.create_ai_client,
         ContentAnalyzer=analyzer.ContentAnalyzer,
-        ContentEnricher=enricher.ContentEnricher,
+        ContentEnricher=None,
         DailySummarizer=summarizer.DailySummarizer,
         expand_env_vars=storage._expand_env_vars,
     )
@@ -209,9 +207,6 @@ def apply_source_filter(
     if "telegram" not in wanted:
         clone.sources.telegram.enabled = False
         clone.sources.telegram.channels = []
-    if "twitter" not in wanted and getattr(clone.sources, "twitter", None):
-        clone.sources.twitter.enabled = False
-        clone.sources.twitter.users = []
     if "openbb" not in wanted and getattr(clone.sources, "openbb", None):
         clone.sources.openbb.enabled = False
         clone.sources.openbb.watchlists = []
@@ -233,8 +228,6 @@ def get_enabled_sources(config: Any) -> list[str]:
         enabled.append("reddit")
     if getattr(config.sources.telegram, "enabled", False):
         enabled.append("telegram")
-    if getattr(getattr(config.sources, "twitter", None), "enabled", False):
-        enabled.append("twitter")
     if getattr(getattr(config.sources, "openbb", None), "enabled", False):
         enabled.append("openbb")
     return enabled

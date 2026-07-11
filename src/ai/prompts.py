@@ -126,7 +126,7 @@ Field definitions:
 
 **CRITICAL — Language rules (MUST follow):**
 - All *_en fields MUST be written in English.
-- All *_zh fields MUST be written in Simplified Chinese (简体中文). 绝对不能用英文写 _zh 字段的内容。Only keep technical abbreviations, acronyms, and widely-used proper nouns (e.g. "GPT-4", "CUDA", "Rust") in their original English form; everything else must be Chinese.
+- All *_zh fields MUST be written in Traditional Chinese (繁體中文). 絕對不能用英文寫 _zh 欄位的內容。Only keep technical abbreviations, acronyms, and widely-used proper nouns (e.g. "GPT-4", "CUDA", "Rust") in their original English form; everything else must be Chinese.
 
 Guidelines:
 - EVERY field (except community_discussion when no comments exist) must contain at least one complete sentence — no field may be empty or contain just a phrase
@@ -154,19 +154,19 @@ CONTENT_ENRICHMENT_USER = """Provide a structured bilingual analysis for the fol
 **Web Search Results (for grounding):**
 {web_context}
 
-Respond with valid JSON only. Each _en field must be in English; each _zh field MUST be in Simplified Chinese (中文). Every field MUST be at least one complete sentence (except community_discussion fields when no comments exist):
+Respond with valid JSON only. Each _en field must be in English; each _zh field MUST be in Traditional Chinese (繁體中文). Every field MUST be at least one complete sentence (except community_discussion fields when no comments exist):
 {{
   "title_en": "<short headline in English, ≤15 words>",
-  "title_zh": "<用中文写一个简短标题，不超过15个词>",
+  "title_zh": "<用繁體中文寫一個簡短標題，不超過15個詞>",
   "whats_new_en": "<1-2 sentences in English>",
-  "whats_new_zh": "<用中文写1-2句话>",
+  "whats_new_zh": "<用繁體中文寫1-2句話>",
   "why_it_matters_en": "<1-2 sentences in English>",
-  "why_it_matters_zh": "<用中文写1-2句话>",
+  "why_it_matters_zh": "<用繁體中文寫1-2句話>",
   "key_details_en": "<1-2 sentences in English>",
-  "key_details_zh": "<用中文写1-2句话>",
+  "key_details_zh": "<用繁體中文寫1-2句話>",
   "background_en": "<2-4 sentences in English, or empty string>",
-  "background_zh": "<用中文写2-4句话，或空字符串>",
+  "background_zh": "<用繁體中文寫2-4句話，或空字符串>",
   "community_discussion_en": "<1-3 sentences in English, or empty string>",
-  "community_discussion_zh": "<用中文写1-3句话，或空字符串>",
+  "community_discussion_zh": "<用繁體中文寫1-3句話，或空字符串>",
   "sources": ["<url from search results>", "..."]
 }}"""

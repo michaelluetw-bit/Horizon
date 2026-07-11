@@ -129,6 +129,11 @@ class ContentAnalyzer:
 
         discussion_section = "\n".join(discussion_parts) if discussion_parts else ""
 
+        # Check if config.languages contains "zh"
+        config = getattr(self.client, "config", None)
+        languages = getattr(config, "languages", ["en"])
+        need_zh = "zh" in languages
+
         # Generate user prompt
         user_prompt = CONTENT_ANALYSIS_USER.format(
             title=item.title,
@@ -138,6 +143,16 @@ class ContentAnalyzer:
             content_section=content_section,
             discussion_section=discussion_section
         )
+
+        if need_zh:
+            user_prompt += (
+                "\n\n**CRITICAL REQUIREMENT:**\n"
+                "Because the target language is Traditional Chinese, you MUST also add two fields to the JSON response:\n"
+                "- \"title_zh\": A Traditional Chinese (繁體中文) translation of the title.\n"
+                "- \"summary_zh\": A detailed summary in Traditional Chinese (繁體中文) (3-4 sentences, about 150-200 Chinese characters in total) explaining: "
+                "1) What exactly is new or changed, 2) Why it matters or its potential impact, and 3) Any key technical details.\n"
+                "Ensure that these two extra keys are included in the JSON object."
+            )
 
         # Get AI completion
         response = await self.client.complete(
@@ -160,3 +175,7 @@ class ContentAnalyzer:
         item.ai_reason = result.get("reason", "")
         item.ai_summary = result.get("summary", item.title)
         item.ai_tags = result.get("tags", [])
+
+        if need_zh:
+            item.metadata["title_zh"] = result.get("title_zh") or item.title
+            item.metadata["detailed_summary_zh"] = result.get("summary_zh") or item.ai_summary
