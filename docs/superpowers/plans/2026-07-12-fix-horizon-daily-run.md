@@ -231,6 +231,46 @@ Run: `.venv\Scripts\python.exe -m pytest -q`
 
 Expected: both commands exit with zero failures.
 
+### Task 4B: Run CI on Windows
+
+**Files:**
+- Modify: `.github/workflows/ci.yml`
+- Modify: `tests/test_daily_publish_contract.py`
+- Modify: `docs/superpowers/plans/2026-07-12-fix-horizon-daily-run.md`
+
+**Interfaces:**
+- Consumes: the Windows-specific `powershell.exe` behavioral test for `scripts/sync_latest.ps1`.
+- Produces: a `CI / test` GitHub Actions check that can execute the complete suite, including the Windows synchronization test.
+
+- [x] **Step 1: Add the runner requirement to the CI contract**
+
+```python
+assert "runs-on: windows-latest" in workflow
+```
+
+- [x] **Step 2: Run the CI contract and verify RED**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::test_ci_runs_locked_full_tests_without_production_secrets -v`
+
+Expected: FAIL because the workflow currently contains `runs-on: ubuntu-latest`.
+
+- [x] **Step 3: Make the runner match the Windows contract**
+
+```yaml
+jobs:
+  test:
+    name: test
+    runs-on: windows-latest
+```
+
+Keep the existing read-only permission, locked dependency installation, full pytest command, and absence of production secrets.
+
+- [ ] **Step 4: Verify GREEN locally and in GitHub Actions**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::test_ci_runs_locked_full_tests_without_production_secrets -v`
+
+Then push the commit and require the `CI / test` check to be successful before merge.
+
 ### Task 5: Verify and deliver
 
 **Files:**

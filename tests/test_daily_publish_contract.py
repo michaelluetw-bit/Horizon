@@ -32,6 +32,7 @@ def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
     assert "pull_request:" in workflow
     assert "branches: [main]" in workflow
     assert "contents: read" in workflow
+    assert "runs-on: windows-latest" in workflow
     assert "uv sync --locked --extra dev" in workflow
     assert "uv run pytest -q" in workflow
     for forbidden in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "HORIZON_WEBHOOK_URL"):
