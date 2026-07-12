@@ -18,9 +18,17 @@ def write_source(source_dir: Path, name: str = f"horizon-{DATE}-zh.md") -> Path:
     return source
 
 
-def test_resolve_source_requires_exactly_one_chinese_artifact(tmp_path: Path) -> None:
+def test_resolve_source_uses_chinese_artifact(tmp_path: Path) -> None:
     source_dir = tmp_path / "summaries"
     expected = write_source(source_dir)
+
+    assert resolve_source(source_dir, DATE) == expected
+
+
+def test_resolve_source_uses_chinese_artifact_when_other_languages_exist(tmp_path: Path) -> None:
+    source_dir = tmp_path / "summaries"
+    expected = write_source(source_dir)
+    write_source(source_dir, f"horizon-{DATE}-en.md")
 
     assert resolve_source(source_dir, DATE) == expected
 
@@ -30,12 +38,9 @@ def test_resolve_source_requires_exactly_one_chinese_artifact(tmp_path: Path) ->
     [
         ([], "SOURCE_NOT_FOUND"),
         ([f"horizon-{DATE}-en.md"], "SOURCE_INVALID"),
-        ([f"horizon-{DATE}-zh.md", f"horizon-{DATE}-en.md"], "AMBIGUOUS_SOURCE"),
     ],
 )
-def test_resolve_source_rejects_missing_invalid_or_ambiguous_sources(
-    tmp_path: Path, filenames: list[str], status: str
-) -> None:
+def test_resolve_source_rejects_missing_or_invalid_sources(tmp_path: Path, filenames: list[str], status: str) -> None:
     source_dir = tmp_path / "summaries"
     for filename in filenames:
         write_source(source_dir, filename)

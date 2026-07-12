@@ -67,16 +67,14 @@ try {
     Write-StructuredLog "ARTIFACT_DATE=$ArtifactDate"
 
     $sourceDir = Join-Path $ProjectRoot "data\summaries"
-    $matches = @(Get-ChildItem -LiteralPath $sourceDir -Filter "horizon-$ArtifactDate-*.md" -File -ErrorAction SilentlyContinue)
-    if ($matches.Count -eq 0) {
-        Stop-Pipeline "SOURCE_NOT_FOUND" 20 "No Horizon source for $ArtifactDate."
-    }
-    if ($matches.Count -gt 1) {
-        Stop-Pipeline "AMBIGUOUS_SOURCE" 21 (($matches.Name -join ", "))
-    }
     $expectedName = "horizon-$ArtifactDate-zh.md"
-    if ($matches[0].Name -ne $expectedName) {
-        Stop-Pipeline "SOURCE_INVALID" 22 "Expected $expectedName, found $($matches[0].Name)."
+    $expectedSource = Join-Path $sourceDir $expectedName
+    if (-not (Test-Path -LiteralPath $expectedSource -PathType Leaf)) {
+        $matches = @(Get-ChildItem -LiteralPath $sourceDir -Filter "horizon-$ArtifactDate-*.md" -File -ErrorAction SilentlyContinue)
+        if ($matches.Count -eq 0) {
+            Stop-Pipeline "SOURCE_NOT_FOUND" 20 "No Horizon source for $ArtifactDate."
+        }
+        Stop-Pipeline "SOURCE_INVALID" 22 "Expected $expectedName, found $($matches.Name -join ', ')."
     }
     Write-StructuredLog "SOURCE_MATCH_COUNT=1"
 
