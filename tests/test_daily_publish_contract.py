@@ -76,7 +76,7 @@ def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
         assert forbidden not in workflow
 
 
-def test_ci_runs_non_blocking_ruff_from_the_locked_dev_extra() -> None:
+def test_ci_requires_blocking_ruff_from_the_locked_dev_extra() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
@@ -85,7 +85,7 @@ def test_ci_runs_non_blocking_ruff_from_the_locked_dev_extra() -> None:
     assert "  ruff:\n" in workflow
     ruff_job = workflow.split("  ruff:\n", 1)[1].split("\n  test:\n", 1)[0]
     assert "name: ruff" in ruff_job
-    assert "continue-on-error: true" in ruff_job
+    assert "continue-on-error: true" not in ruff_job
     assert "uv sync --locked --extra dev" in ruff_job
     assert "uv run ruff check ." in ruff_job
 
