@@ -28,6 +28,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
+    "ruff>=0.15.12",
 ]
 openbb = [
     "openbb>=4.4.0",

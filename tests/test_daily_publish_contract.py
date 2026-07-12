@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 
 
@@ -73,6 +74,20 @@ def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
     assert "uv run pytest -q" in workflow
     for forbidden in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "HORIZON_WEBHOOK_URL"):
         assert forbidden not in workflow
+
+
+def test_ci_runs_non_blocking_ruff_from_the_locked_dev_extra() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    dev_dependencies = pyproject["project"]["optional-dependencies"]["dev"]
+    assert any(dependency.startswith("ruff") for dependency in dev_dependencies)
+    assert "  ruff:\n" in workflow
+    ruff_job = workflow.split("  ruff:\n", 1)[1].split("\n  test:\n", 1)[0]
+    assert "name: ruff" in ruff_job
+    assert "continue-on-error: true" in ruff_job
+    assert "uv sync --locked --extra dev" in ruff_job
+    assert "uv run ruff check ." in ruff_job
 
 
 def test_cloud_config_is_valid_and_excludes_paused_categories() -> None:
