@@ -23,6 +23,12 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     assert "peaceiris/actions-gh-pages" in deployment
 
 
+def test_daily_workflow_force_tracks_ignored_generated_artifacts() -> None:
+    workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
+
+    assert "git add -f data/summaries docs/_posts" in workflow
+
+
 def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
     workflow_path = ROOT / ".github/workflows/ci.yml"
 
