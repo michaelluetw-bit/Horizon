@@ -1075,6 +1075,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rich" },
     { name = "tenacity" },
+    { name = "tzdata" },
 ]
 
 [package.optional-dependencies]
@@ -1114,6 +1115,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rich", specifier = ">=13.9.0" },
     { name = "tenacity", specifier = ">=9.0.0" },
+    { name = "tzdata", specifier = ">=2025.2" },
 ]
 provides-extras = ["dev", "openbb", "twitter"]
 
