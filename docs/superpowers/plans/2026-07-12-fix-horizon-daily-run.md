@@ -162,7 +162,76 @@ Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::t
 
 Expected: one test passes and the target directory is not created.
 
-### Task 4: Verify and deliver
+### Task 4: Add an independent CI gate
+
+**Files:**
+- Create: `.github/workflows/ci.yml`
+- Modify: `tests/test_daily_publish_contract.py`
+- Modify: `docs/superpowers/plans/2026-07-12-fix-horizon-daily-run.md`
+
+**Interfaces:**
+- Consumes: a pull request or a push to `main`.
+- Produces: a read-only `CI / test` check that installs locked development dependencies and runs the complete pytest suite without production secrets.
+
+- [x] **Step 1: Write the failing CI contract test**
+
+```python
+def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
+    workflow_path = ROOT / ".github/workflows/ci.yml"
+    assert workflow_path.exists(), "Missing independent CI workflow"
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert "pull_request:" in workflow
+    assert "branches: [main]" in workflow
+    assert "contents: read" in workflow
+    assert "uv sync --locked --extra dev" in workflow
+    assert "uv run pytest -q" in workflow
+    for forbidden in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "HORIZON_WEBHOOK_URL"):
+        assert forbidden not in workflow
+```
+
+- [x] **Step 2: Run the test and verify RED**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::test_ci_runs_locked_full_tests_without_production_secrets -v`
+
+Expected: FAIL with `Missing independent CI workflow`.
+
+- [x] **Step 3: Add the minimal read-only workflow**
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked --extra dev
+      - run: uv run pytest -q
+```
+
+- [x] **Step 4: Run the CI contract and full suite**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py tests/test_publish_horizon.py -v`
+
+Run: `.venv\Scripts\python.exe -m pytest -q`
+
+Expected: both commands exit with zero failures.
+
+### Task 5: Verify and deliver
 
 **Files:**
 - Include: all files listed in Tasks 1-3

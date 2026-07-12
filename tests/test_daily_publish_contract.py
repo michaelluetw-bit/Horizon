@@ -23,6 +23,21 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     assert "peaceiris/actions-gh-pages" in deployment
 
 
+def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
+    workflow_path = ROOT / ".github/workflows/ci.yml"
+
+    assert workflow_path.exists(), "Missing independent CI workflow"
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    assert "pull_request:" in workflow
+    assert "branches: [main]" in workflow
+    assert "contents: read" in workflow
+    assert "uv sync --locked --extra dev" in workflow
+    assert "uv run pytest -q" in workflow
+    for forbidden in ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "HORIZON_WEBHOOK_URL"):
+        assert forbidden not in workflow
+
+
 def test_cloud_config_is_valid_and_excludes_paused_categories() -> None:
     config = json.loads((ROOT / "data/config.github.json").read_text(encoding="utf-8"))
     serialized = json.dumps(config, ensure_ascii=False).lower()
