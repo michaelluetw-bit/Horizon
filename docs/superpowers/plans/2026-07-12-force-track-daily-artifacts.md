@@ -4,7 +4,7 @@
 
 **Goal:** Ensure the successful daily Horizon workflow commits its ignored Markdown artifacts to `main` so the local sync can publish the exact dated report.
 
-**Architecture:** Keep `.gitignore` unchanged for local generated files. Change only the GitHub Actions commit step to force-add `data/summaries` and `docs/_posts`, guarded by the existing path-scoped `git status` condition.
+**Architecture:** Keep `.gitignore` unchanged for local generated files. Change only the GitHub Actions commit step to force-add `data/summaries` and `docs/_posts`, then inspect the staged index with `git diff --cached --quiet` before committing.
 
 **Tech Stack:** GitHub Actions YAML, pytest, GitHub Actions CI.
 
@@ -48,10 +48,12 @@ Expected: FAIL because the current workflow uses `git add data/summaries docs/_p
 ```yaml
 - name: Commit and push changes
   run: |
-    if [ -n "$(git status --porcelain data/summaries docs/_posts)" ]; then
+    git add -f data/summaries docs/_posts
+    if git diff --cached --quiet; then
+      echo "No summary changes to commit."
+    else
       git config --global user.name "github-actions[bot]"
       git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-      git add -f data/summaries docs/_posts
       git commit -m "docs: 雲端自動生成每日快報 [skip ci]"
       git push origin main
     fi
