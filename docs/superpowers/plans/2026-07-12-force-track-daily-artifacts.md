@@ -65,6 +65,60 @@ Run: `uv run pytest -q`
 
 Expected: both commands exit with zero failures.
 
+### Task 1B: Stage ignored artifacts before checking for a commit
+
+**Files:**
+- Modify: `.github/workflows/horizon_daily.yml`
+- Modify: `tests/test_daily_publish_contract.py`
+- Modify: `docs/superpowers/plans/2026-07-12-force-track-daily-artifacts.md`
+
+**Interfaces:**
+- Consumes: ignored untracked Markdown artifacts created during a clean GitHub Actions run.
+- Produces: a staged diff that is non-empty exactly when generated artifacts differ from the repository state.
+
+- [x] **Step 1: Extend the failing contract to require stage-first control flow**
+
+```python
+def test_daily_workflow_force_tracks_ignored_generated_artifacts() -> None:
+    workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
+
+    assert "git add -f data/summaries docs/_posts" in workflow
+    assert "if git diff --cached --quiet; then" in workflow
+    assert "git status --porcelain data/summaries docs/_posts" not in workflow
+```
+
+Add a temporary Git repository test that writes ignored files in both output directories, executes `git add -f data/summaries docs/_posts`, and asserts `git diff --cached --quiet` returns `1`.
+
+- [x] **Step 2: Run the contract and verify RED**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::test_daily_workflow_force_tracks_ignored_generated_artifacts -v`
+
+Expected: FAIL because the workflow checks `git status --porcelain` before it stages ignored output.
+
+- [x] **Step 3: Stage first and inspect the index**
+
+```yaml
+- name: Commit and push changes
+  run: |
+    git add -f data/summaries docs/_posts
+    if git diff --cached --quiet; then
+      echo "No summary changes to commit."
+    else
+      git config --global user.name "github-actions[bot]"
+      git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      git commit -m "docs: 雲端自動生成每日快報 [skip ci]"
+      git push origin main
+    fi
+```
+
+- [x] **Step 4: Verify GREEN and the full suite**
+
+Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py -v`
+
+Run: `uv run pytest -q`
+
+Expected: both commands exit with zero failures.
+
 ### Task 2: Deliver and replay the missed artifact
 
 **Files:**

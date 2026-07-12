@@ -49,12 +49,12 @@ jobs:
 
       - name: Commit and push changes
         run: |
-          if [ -n "$(git status --porcelain data/summaries docs/_posts)" ]; then
+          git add -f data/summaries docs/_posts
+          if git diff --cached --quiet; then
+            echo "No summary changes to commit."
+          else
             git config --global user.name "github-actions[bot]"
             git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -f data/summaries docs/_posts
             git commit -m "docs: 雲端自動生成每日快報 [skip ci]"
             git push origin main
-          else
-            echo "No summary changes to commit."
           fi

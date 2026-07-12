@@ -27,6 +27,36 @@ def test_daily_workflow_force_tracks_ignored_generated_artifacts() -> None:
     workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
 
     assert "git add -f data/summaries docs/_posts" in workflow
+    assert "if git diff --cached --quiet; then" in workflow
+    assert "git status --porcelain data/summaries docs/_posts" not in workflow
+
+
+def test_force_add_stages_ignored_generated_artifacts(tmp_path: Path) -> None:
+    (tmp_path / ".gitignore").write_text("data/summaries/*.md\ndocs/_posts/*.md\n", encoding="utf-8")
+    source = tmp_path / "data" / "summaries" / "horizon-2026-07-12-zh.md"
+    post = tmp_path / "docs" / "_posts" / "2026-07-12-summary-zh.md"
+    source.parent.mkdir(parents=True)
+    post.parent.mkdir(parents=True)
+    source.write_text("summary", encoding="utf-8")
+    post.write_text("post", encoding="utf-8")
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "add", "-f", "data/summaries", "docs/_posts"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert staged.returncode == 1
 
 
 def test_ci_runs_locked_full_tests_without_production_secrets() -> None:
