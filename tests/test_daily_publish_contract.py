@@ -99,7 +99,6 @@ def test_sync_script_exposes_required_safety_contract() -> None:
         "DIRTY_WORKTREE",
         "PULL_FAILED",
         "SOURCE_NOT_FOUND",
-        "AMBIGUOUS_SOURCE",
         "SOURCE_INVALID",
         "PUBLISH_FAILED",
         "PUBLISH_SUCCESS_DASHBOARD_UNAVAILABLE",
@@ -108,6 +107,15 @@ def test_sync_script_exposes_required_safety_contract() -> None:
         assert marker in script
     assert "Start-Sleep" not in script
     assert "git reset" not in script
+
+
+def test_sync_script_selects_chinese_source_when_bilingual_summaries_exist() -> None:
+    script = (ROOT / "scripts/sync_latest.ps1").read_text(encoding="utf-8")
+
+    assert '$expectedName = "horizon-$ArtifactDate-zh.md"' in script
+    assert "$expectedSource = Join-Path $sourceDir $expectedName" in script
+    assert "Test-Path -LiteralPath $expectedSource -PathType Leaf" in script
+    assert "$matches.Count -gt 1" not in script
 
 
 def test_sync_invalid_repository_returns_code_10_without_creating_target(tmp_path: Path) -> None:

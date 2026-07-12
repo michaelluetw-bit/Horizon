@@ -68,16 +68,15 @@ def taipei_today() -> str:
 
 def resolve_source(source_dir: Path, artifact_date: str) -> Path:
     validate_date(artifact_date)
+    expected = source_dir / f"horizon-{artifact_date}-zh.md"
+    if expected.is_file():
+        return expected
+
     matches = sorted(source_dir.glob(f"horizon-{artifact_date}-*.md")) if source_dir.exists() else []
     if not matches:
         raise PublishError("SOURCE_NOT_FOUND", f"No source for {artifact_date}")
-    if len(matches) > 1:
-        raise PublishError("AMBIGUOUS_SOURCE", ", ".join(item.name for item in matches))
 
-    expected = f"horizon-{artifact_date}-zh.md"
-    if matches[0].name != expected:
-        raise PublishError("SOURCE_INVALID", f"Expected {expected}, found {matches[0].name}")
-    return matches[0]
+    raise PublishError("SOURCE_INVALID", f"Expected {expected.name}, found {', '.join(item.name for item in matches)}")
 
 
 def convert_to_taiwan(markdown: str) -> str:
