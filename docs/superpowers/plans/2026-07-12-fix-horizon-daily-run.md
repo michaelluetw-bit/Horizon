@@ -265,7 +265,7 @@ jobs:
 
 Keep the existing read-only permission, locked dependency installation, full pytest command, and absence of production secrets.
 
-- [ ] **Step 4: Verify GREEN locally and in GitHub Actions**
+- [x] **Step 4: Verify GREEN locally and in GitHub Actions**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_daily_publish_contract.py::test_ci_runs_locked_full_tests_without_production_secrets -v`
 
