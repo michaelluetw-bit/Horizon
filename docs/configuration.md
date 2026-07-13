@@ -206,13 +206,15 @@ All sources are configured under the top-level `sources` key in `config.json`.
       {
         "type": "user_events",
         "username": "gvanrossum",
-        "enabled": true
+        "enabled": true,
+        "category": "oss"
       },
       {
         "type": "repo_releases",
         "owner": "python",
         "repo": "cpython",
-        "enabled": true
+        "enabled": true,
+        "category": "oss"
       }
     ]
   }
@@ -227,7 +229,8 @@ All sources are configured under the top-level `sources` key in `config.json`.
     "hackernews": {
       "enabled": true,
       "fetch_top_stories": 30,
-      "min_score": 100
+      "min_score": 100,
+      "category": "tech"
     }
   }
 }
@@ -265,14 +268,16 @@ Reddit scraping is free and does not require API keys. Subreddit posts and comme
           "subreddit": "MachineLearning",
           "sort": "hot",
           "fetch_limit": 25,
-          "min_score": 10
+          "min_score": 10,
+          "category": "ai-ml"
         }
       ],
       "users": [
         {
           "username": "spez",
           "sort": "new",
-          "fetch_limit": 10
+          "fetch_limit": 10,
+          "category": "social"
         }
       ]
     }
@@ -293,7 +298,8 @@ Telegram scraping uses the public web preview at `https://t.me/s/<channel>`, so 
         {
           "channel": "zaihuapd",
           "enabled": true,
-          "fetch_limit": 20
+          "fetch_limit": 20,
+          "category": "ai-news"
         }
       ]
     }
@@ -305,6 +311,7 @@ Telegram scraping uses the public web preview at `https://t.me/s/<channel>`, so 
 - `channels` — list of public Telegram channels to monitor
 - `channel` — Telegram channel username only, without `@` or the full `https://t.me/` URL
 - `fetch_limit` — maximum number of recent messages to inspect per channel per run (default: `20`)
+- `category` — optional tag for balanced digest grouping
 
 ### Twitter
 
@@ -394,7 +401,8 @@ Pulls top star-gain repositories from the [OSS Insight](https://ossinsight.io) p
       "languages": ["All", "Python", "TypeScript"],
       "keywords": [],
       "min_stars": 10,
-      "max_items": 30
+      "max_items": 30,
+      "category": "oss-trending"
     }
   }
 }
@@ -405,6 +413,7 @@ Pulls top star-gain repositories from the [OSS Insight](https://ossinsight.io) p
 - `keywords` — optional case-insensitive substrings matched against `description`, `collection_names`, and `repo_name`. Only repos containing at least one keyword pass through. Leave empty to ingest everything trending.
 - `min_stars` — drop repos with fewer than this many stars gained in the period.
 - `max_items` — final cap after merging and sorting by `stars_gained` descending.
+- `category` — optional tag for balanced digest grouping.
 
 No API key is required.
 
@@ -459,9 +468,12 @@ deduplication, but before enrichment. This reduces enrichment calls to only the
 items that can appear in the final digest.
 
 Group matching uses the source category stored in `ContentItem.metadata.category`.
-RSS sources expose this through `sources.rss[].category`, and OpenBB watchlists
-through `sources.openbb.watchlists[].category`. Sources without a category enter
-the default group.
+Supported fields include `sources.rss[].category`, `sources.github[].category`,
+`sources.hackernews.category`, `sources.reddit.subreddits[].category`,
+`sources.reddit.users[].category`, `sources.telegram.channels[].category`,
+`sources.openbb.watchlists[].category`, `sources.ossinsight.category`,
+`sources.gdelt.category`, and `sources.google_news.category`. Sources without a
+category enter the default group.
 
 If the same category appears in multiple groups, Horizon logs a warning and uses
 the first group in configuration order. Omitting both `category_groups` and

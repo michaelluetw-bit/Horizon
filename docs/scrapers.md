@@ -24,14 +24,16 @@ Stories and their comments are fetched concurrently. For each story, the top 5 c
 {
   "enabled": true,
   "fetch_top_stories": 30,
-  "min_score": 100
+  "min_score": 100,
+  "category": "tech"
 }
 ```
 
 - `fetch_top_stories` — number of top story IDs to fetch
 - `min_score` — minimum HN points to include a story
+- `category` — optional tag for balanced digest grouping
 
-**Extracted data**: title, URL (falls back to HN discussion URL), author, score, comment count, and top comment text.
+**Extracted data**: title, URL (falls back to HN discussion URL), author, score, comment count, top comment text, and category.
 
 ## GitHub
 
@@ -53,7 +55,8 @@ Two source types are supported:
 {
   "type": "user_events",
   "username": "torvalds",
-  "enabled": true
+  "enabled": true,
+  "category": "oss"
 }
 ```
 
@@ -62,9 +65,12 @@ Two source types are supported:
   "type": "repo_releases",
   "owner": "golang",
   "repo": "go",
-  "enabled": true
+  "enabled": true,
+  "category": "oss"
 }
 ```
+
+- `category` — optional tag for balanced digest grouping; set per source entry
 
 **Authentication**: Set `GITHUB_TOKEN` in your environment for higher rate limits (5000 req/hr vs 60 without).
 
@@ -115,14 +121,16 @@ Subreddits and users are fetched concurrently. Comments are sorted by score, lim
       "subreddit": "MachineLearning",
       "sort": "hot",
       "fetch_limit": 25,
-      "min_score": 10
+      "min_score": 10,
+      "category": "ai-ml"
     }
   ],
   "users": [
     {
       "username": "spez",
       "sort": "new",
-      "fetch_limit": 10
+      "fetch_limit": 10,
+      "category": "social"
     }
   ]
 }
@@ -131,10 +139,11 @@ Subreddits and users are fetched concurrently. Comments are sorted by score, lim
 - `sort` — `hot`, `new`, `top`, or `rising` (subreddits); `hot` or `new` (users)
 - `time_filter` — for `top`/`rising` sorts: `hour`, `day`, `week`, `month`, `year`, `all`
 - `min_score` — minimum post score (subreddits only)
+- `category` — optional tag for balanced digest grouping; set per subreddit or per user entry
 
 **Rate limiting**: Detects HTTP 429 responses on JSON requests, reads the `Retry-After` header, waits, and retries once. Uses browser-like request headers for no-key public access.
 
-**Extracted data**: title, URL, author, score, upvote ratio, comment count, subreddit, flair, self-text, and top comments.
+**Extracted data**: title, URL, author, score, upvote ratio, comment count, subreddit, flair, self-text, top comments, and category.
 
 ## OpenBB
 
