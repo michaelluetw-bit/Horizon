@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.publish_horizon import PublishError, convert_to_taiwan, publish, resolve_source
+from scripts.publish_horizon import PublishError, convert_to_taiwan, publish, publish_blob, resolve_source
 
 
 DATE = "2026-07-11"
@@ -14,7 +14,10 @@ DATE = "2026-07-11"
 def write_source(source_dir: Path, name: str = f"horizon-{DATE}-zh.md") -> Path:
     source_dir.mkdir(parents=True, exist_ok=True)
     source = source_dir / name
-    source.write_text("# 每日摘要\n\n軟件、數據、網絡、人工智能、信息、用戶、視頻。\n", encoding="utf-8")
+    source.write_text(
+        f"# Horizon 每日快遞 - {DATE}\n\n軟件、數據、網絡、人工智能、信息、用戶、視頻。\n",
+        encoding="utf-8",
+    )
     return source
 
 
@@ -100,6 +103,18 @@ def test_publish_is_idempotent_and_does_not_change_mtime(tmp_path: Path) -> None
 
     assert publish(source_dir, target_dir, DATE, project_root=tmp_path) == "ALREADY_PUBLISHED"
     assert target.stat().st_mtime_ns == first_mtime
+
+
+def test_publish_blob_preserves_utf8_chinese_content_through_taiwan_conversion(tmp_path: Path) -> None:
+    source_ref = f"data/summaries/horizon-{DATE}-zh.md"
+    source_body = f"# Horizon 每日快遞 - {DATE}\n\n罕見字：臺灣、😀、軟件。\n"
+    source_bytes = source_body.encode("utf-8")
+    target_dir = tmp_path / "vault" / "01_Horizon"
+
+    assert publish_blob(source_bytes, target_dir, DATE, source_ref) == "SUCCESS"
+
+    output = (target_dir / f"{DATE}-horizon.md").read_text(encoding="utf-8")
+    assert "罕見字：臺灣、😀、軟體。" in output
 
 
 def test_invalid_source_does_not_replace_existing_artifact(tmp_path: Path) -> None:

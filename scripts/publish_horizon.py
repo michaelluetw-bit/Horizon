@@ -86,12 +86,16 @@ def convert_to_taiwan(markdown: str) -> str:
     return converted
 
 
-def build_output(source: Path, artifact_date: str, body: str, project_root: Path) -> str:
-    try:
-        source_ref = source.resolve().relative_to(project_root.resolve()).as_posix()
-    except ValueError as exc:
-        raise PublishError("SOURCE_INVALID", "Source must be inside the Horizon repository") from exc
+def validate_source_markdown(markdown: str, artifact_date: str) -> None:
+    clean_body = re.sub(r"\A---\s*\n.*?\n---\s*\n?", "", markdown, flags=re.DOTALL).strip()
+    if not clean_body:
+        raise PublishError("SOURCE_INVALID", "Source Markdown is empty")
+    expected_heading = f"# Horizon 每日快遞 - {artifact_date}"
+    if clean_body.splitlines()[0] != expected_heading:
+        raise PublishError("SOURCE_INVALID", f"Expected heading: {expected_heading}")
 
+
+def build_output(source_ref: str, artifact_date: str, body: str) -> str:
     clean_body = re.sub(r"\A---\s*\n.*?\n---\s*\n?", "", body, flags=re.DOTALL).strip()
     if not clean_body:
         raise PublishError("SOURCE_INVALID", "Source Markdown is empty")
@@ -164,16 +168,22 @@ def validate_output(markdown: str, artifact_date: str, source_ref: str) -> None:
     markdown.encode("utf-8", errors="strict")
 
 
-def publish(source_dir: Path, target_dir: Path, artifact_date: str, *, project_root: Path = PROJECT_ROOT) -> str:
-    source = resolve_source(source_dir, artifact_date)
+def source_ref_for(source: Path, project_root: Path) -> str:
     try:
-        raw = source.read_text(encoding="utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise PublishError("SOURCE_INVALID", f"Source is not valid UTF-8: {source}") from exc
+        return source.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError as exc:
+        raise PublishError("SOURCE_INVALID", "Source must be inside the Horizon repository") from exc
 
-    converted = convert_to_taiwan(raw)
-    output = build_output(source, artifact_date, converted, project_root)
-    source_ref = source.resolve().relative_to(project_root.resolve()).as_posix()
+
+def publish_markdown(markdown: str, target_dir: Path, artifact_date: str, source_ref: str) -> str:
+    validate_date(artifact_date)
+    expected_source_ref = f"data/summaries/horizon-{artifact_date}-zh.md"
+    if source_ref != expected_source_ref:
+        raise PublishError("SOURCE_INVALID", f"Expected source {expected_source_ref}, found {source_ref}")
+
+    validate_source_markdown(markdown, artifact_date)
+    converted = convert_to_taiwan(markdown)
+    output = build_output(source_ref, artifact_date, converted)
     validate_output(output, artifact_date, source_ref)
 
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -202,18 +212,46 @@ def publish(source_dir: Path, target_dir: Path, artifact_date: str, *, project_r
     return "SUCCESS"
 
 
+def publish_blob(source_bytes: bytes, target_dir: Path, artifact_date: str, source_ref: str) -> str:
+    try:
+        markdown = source_bytes.decode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise PublishError("SOURCE_INVALID", "Source is not valid UTF-8") from exc
+    return publish_markdown(markdown, target_dir, artifact_date, source_ref)
+
+
+def publish(source_dir: Path, target_dir: Path, artifact_date: str, *, project_root: Path = PROJECT_ROOT) -> str:
+    source = resolve_source(source_dir, artifact_date)
+    try:
+        markdown = source.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeError) as exc:
+        raise PublishError("SOURCE_INVALID", f"Unable to read source: {source}") from exc
+    return publish_markdown(markdown, target_dir, artifact_date, source_ref_for(source, project_root))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publish the canonical daily Horizon artifact.")
     parser.add_argument("--date", default=taipei_today(), help="Asia/Taipei date in YYYY-MM-DD")
     parser.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE_DIR)
     parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET_DIR)
+    parser.add_argument("--source-file", type=Path, help="Read an authoritative UTF-8 source blob from this file")
+    parser.add_argument("--source-ref", help="Repository-relative path for --source-file")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     try:
-        status = publish(args.source_dir, args.target_dir, args.date)
+        if args.source_file or args.source_ref:
+            if not args.source_file or not args.source_ref:
+                raise PublishError("SOURCE_INVALID", "--source-file and --source-ref must be supplied together")
+            try:
+                source_bytes = args.source_file.read_bytes()
+            except OSError as exc:
+                raise PublishError("SOURCE_INVALID", f"Unable to read source file: {args.source_file}") from exc
+            status = publish_blob(source_bytes, args.target_dir, args.date, args.source_ref)
+        else:
+            status = publish(args.source_dir, args.target_dir, args.date)
         print(f"STATUS={status}")
         return EXIT_CODES[status]
     except PublishError as exc:
