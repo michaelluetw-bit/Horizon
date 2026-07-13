@@ -25,12 +25,29 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     assert "peaceiris/actions-gh-pages" in deployment
 
 
-def test_daily_workflow_force_tracks_ignored_generated_artifacts() -> None:
+def test_daily_workflow_creates_or_updates_an_app_owned_pull_request() -> None:
     workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
 
+    assert "\npermissions:\n  contents: read\n" in workflow
+    assert "\npermissions:\n  contents: write\n" not in workflow
+    assert "persist-credentials: false" in workflow
     assert "git add -f data/summaries docs/_posts" in workflow
-    assert "if git diff --cached --quiet; then" in workflow
-    assert "git status --porcelain data/summaries docs/_posts" not in workflow
+    assert "actions/create-github-app-token@v3" in workflow
+    assert "${{ vars.HORIZON_AUTOMATION_APP_CLIENT_ID }}" in workflow
+    assert "${{ secrets.HORIZON_AUTOMATION_APP_PRIVATE_KEY }}" in workflow
+    assert "permission-contents: write" in workflow
+    assert "permission-pull-requests: write" in workflow
+    assert "peter-evans/create-pull-request@v8" in workflow
+    assert "token: ${{ steps.app-token.outputs.token }}" in workflow
+    assert "branch-token: ${{ steps.app-token.outputs.token }}" in workflow
+    assert "branch: automation/horizon-daily-publish" in workflow
+    assert "base: main" in workflow
+    assert "delete-branch: true" in workflow
+    assert "pull-request-number" in workflow
+    assert 'gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge' in workflow
+    assert "git push origin main" not in workflow
+    assert "[skip ci]" not in workflow
+    assert "GITHUB_TOKEN" not in workflow
 
 
 def test_force_add_stages_ignored_generated_artifacts(tmp_path: Path) -> None:

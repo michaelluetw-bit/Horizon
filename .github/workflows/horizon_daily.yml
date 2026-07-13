@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: horizon-daily
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,14 +49,40 @@ jobs:
         run: |
           uv run horizon --hours 24
 
-      - name: Commit and push changes
-        run: |
-          git add -f data/summaries docs/_posts
-          if git diff --cached --quiet; then
-            echo "No summary changes to commit."
-          else
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "docs: 雲端自動生成每日快報 [skip ci]"
-            git push origin main
-          fi
+      - name: Stage generated artifacts
+        run: git add -f data/summaries docs/_posts
+
+      - name: Create GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.HORIZON_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HORIZON_AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create or update daily publish pull request
+        id: daily-publish-pr
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch-token: ${{ steps.app-token.outputs.token }}
+          add-paths: |
+            data/summaries
+            docs/_posts
+          branch: automation/horizon-daily-publish
+          base: main
+          delete-branch: true
+          commit-message: "docs: 雲端自動生成每日快報"
+          title: "docs: 雲端自動生成每日快報"
+          body: |
+            此 PR 由 Horizon Daily Aggregation 自動建立或更新。
+
+            `ruff` 與 `test` 均通過後，GitHub 會依 repository auto-merge 設定自動合併。
+
+      - name: Enable auto-merge for daily publish pull request
+        if: steps.daily-publish-pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.daily-publish-pr.outputs.pull-request-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
