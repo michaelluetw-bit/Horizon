@@ -372,6 +372,15 @@ def test_daily_workflow_requires_verified_provenance_and_exact_four_file_gate() 
     assert "git add -f data/summaries docs/_posts" not in workflow
 
 
+def test_daily_workflow_passes_verified_target_date_to_horizon_pipeline() -> None:
+    workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
+    pipeline_step = workflow.split("      - name: Run Horizon pipeline\n", 1)[1].split(
+        "\n      - name: Validate four canonical outputs", 1
+    )[0]
+
+    assert "TARGET_DATE: ${{ steps.provenance.outputs.target_date }}" in pipeline_step
+
+
 def test_force_add_stages_ignored_generated_artifacts(tmp_path: Path) -> None:
     (tmp_path / ".gitignore").write_text("data/summaries/*.md\ndocs/_posts/*.md\n", encoding="utf-8")
     source = tmp_path / "data" / "summaries" / "horizon-2026-07-12-zh.md"

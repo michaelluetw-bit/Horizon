@@ -131,6 +131,7 @@ jobs:
       - name: Run Horizon pipeline
         if: steps.preflight.outputs.decision == 'READY'
         env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
