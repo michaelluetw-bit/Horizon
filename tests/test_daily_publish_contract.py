@@ -350,6 +350,9 @@ def test_daily_workflow_requires_verified_provenance_and_exact_four_file_gate() 
         assert f"      {input_name}:" in workflow
     assert "id-token: write" in workflow
     assert "workers/horizon-watchdog/src/github-provenance.mjs" in workflow
+    assert "HORIZON_EVIDENCE_DIR: ${{ runner.temp }}" not in workflow
+    assert 'evidence_dir="$RUNNER_TEMP/horizon-evidence"' in workflow
+    assert 'echo "HORIZON_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"' in workflow
     assert "HORIZON_WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}" in workflow
     assert "HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}" in workflow
     assert "HORIZON_WATCHDOG_PUBLIC_KEY_JWK: ${{ vars.HORIZON_WATCHDOG_PUBLIC_KEY_JWK }}" in workflow

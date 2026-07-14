@@ -35,7 +35,6 @@ jobs:
       id-token: write
     env:
       TZ: Asia/Taipei
-      HORIZON_EVIDENCE_DIR: ${{ runner.temp }}/horizon-evidence
 
     steps:
       - name: Checkout repository
@@ -43,6 +42,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Initialize execution evidence directory
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/horizon-evidence"
+          mkdir -p "$evidence_dir"
+          echo "HORIZON_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
 
       - name: Capture workflow start
         id: workflow-start
@@ -65,7 +71,6 @@ jobs:
           HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}
           HORIZON_WATCHDOG_PUBLIC_KEY_JWK: ${{ vars.HORIZON_WATCHDOG_PUBLIC_KEY_JWK }}
         run: |
-          mkdir -p "$HORIZON_EVIDENCE_DIR"
           node workers/horizon-watchdog/src/github-provenance.mjs
 
       - name: Set up Python
