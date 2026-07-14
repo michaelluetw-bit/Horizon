@@ -110,7 +110,7 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 
 若 <code>controller.cron</code> 不等於設定的 Watchdog cron，決策為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_CRON_MISMATCH</code>；不得查詢 GitHub runs、不得 dispatch、不得重試。
 
-<code>scheduled_time</code> 必須對應該 <code>target_date</code> 台北時間的 06:00:00；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 05:55:00–06:05:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
+<code>scheduled_time</code> 必須落在該 <code>target_date</code> 台北時間 06:00:00 的 ±5 分鐘窗口（含端點）內；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 05:55:00–06:05:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
 
 <code>MAX_INVOCATION_LAG_MS</code> 固定為 <code>300000</code>。只有 <code>0 &lt;= invocation_delta_ms &lt;= 300000</code> 可繼續；負延遲或大於上限時為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_delta_ms == 300000</code> 仍屬有效。
 
@@ -125,6 +125,7 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 - inputs：
   - <code>trigger_source=fallback-watchdog</code>
   - <code>target_date=YYYY-MM-DD</code>
+  - <code>handoff_id={jti}</code>；它只是不可預測的 lookup handle，不是可信 provenance
 
 同一次 invocation 不等待、不輪詢、不 retry。Worker 平台若重複投遞，仍須先依第 4 節查詢去重。
 
@@ -178,61 +179,165 @@ Cloudflare 與 GitHub logs 是 provenance 證據，不是新的 canonical 資料
 
 ## 6. Workflow provenance、run-name 與 execution manifest
 
-### 6.1 Workflow inputs 與日期 Gate
+### 6.1 不可信 dispatch inputs 與路由
 
-<code>workflow_dispatch</code> 只使用下列兩個 inputs：
+<code>workflow_dispatch</code> 使用下列 inputs，但它們都不是 authorization 或 provenance 證據：
 
-- <code>trigger_source</code>：Watchdog 固定為 <code>fallback-watchdog</code>；manual 使用 <code>manual</code> 或預設值。
-- <code>target_date</code>：Watchdog 必填，格式必須為 <code>YYYY-MM-DD</code>；manual 可留空。
+- <code>trigger_source</code>：只供人類顯示；<code>fallback-watchdog</code> 不能證明呼叫者。
+- <code>target_date</code>：只供顯示與一致性比對；watchdog 路徑不能把它當作權威日期。
+- <code>handoff_id</code>：watchdog dispatch 必填，值等於 assertion 的 <code>jti</code>；它是不可預測的 lookup handle，不能單獨授權或證明來源。
 
-Fallback workflow 的 <code>target_date</code> 必須保留 Watchdog 傳入值。workflow 不得因實際開始時間跨出台北日期而重算、覆寫或默默改成執行當日。格式、event 或來源不符時為 <code>CONFIG_ERROR</code>，停止且不得產生 PR。
+<code>event=schedule</code> 繼續走 primary 契約。對 <code>event=workflow_dispatch</code>：
 
-### 6.2 <code>run-name</code> 的限縮用途
+- <code>handoff_id</code> 缺席且 <code>trigger_source</code> 不是 <code>fallback-watchdog</code>，才可走 manual 契約。
+- <code>handoff_id</code> 存在，或 <code>trigger_source=fallback-watchdog</code>，一律必須走第 6.4 節的 receipt redemption；不因 input 值而直接成為 watchdog。
+- 任一 assertion、receipt、input／receipt 日期或 runtime context 驗證失敗時，結果為 <code>PROVENANCE_REJECTED</code>。不得視為 fallback-watchdog、不得產生正式成果、不得寫入 canonical daily summary、不得建立或更新自動 PR、不得啟用 auto-merge；只可在 Step Summary 與去敏後 logs 留下明確拒絕原因。
 
-<code>run-name</code> 只能引用 <code>github</code> 與 <code>inputs</code> contexts。它只能作為事件來源、schedule／dispatch 類型與 run number 的人類可讀標籤，不得包含或充當精確 <code>target_date</code>、dispatch response 或正式 provenance 證據。
+### 6.2 Cloudflare provenance assertion
 
-### 6.3 三種來源的 manifest 對應
+簽章機制固定為 <code>Ed25519</code> 的 JWS Compact Serialization，assertion protected header 固定為 <code>alg=EdDSA</code>、<code>kid=horizon-watchdog-ed25519-v1</code>、<code>typ=application/horizon-provenance-assertion+jws</code>。Cloudflare 將 Ed25519 private signing key 保存在 encrypted secret；GitHub 的受信任設定只可持有對應 public verification key 與此唯一允許的 <code>kid</code>，不得持有 private key、不得依 assertion header 動態下載 key，也不得自行產生合法 assertion。
 
-Manifest 的 <code>trigger_source</code> 是規範化值，與 workflow input <code>fallback-watchdog</code> 不同：
+Assertion 的固定識別值如下：
+
+| 欄位 | 固定值或格式 |
+| --- | --- |
+| <code>issuer</code> | <code>urn:horizon:cloudflare-watchdog:v1</code> |
+| <code>audience</code> | <code>urn:horizon:p0-b2r:redemption:v1</code> |
+| <code>repository</code> | <code>michaelluetw-bit/Horizon</code> |
+| <code>workflow_identifier</code> | <code>michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main</code> |
+| <code>controller_cron</code> | <code>0 22 * * *</code> |
+| <code>controller_scheduled_time</code> | UTC epoch milliseconds，整數 |
+| <code>jti</code>／<code>one_time_nonce</code> | 同一值；32 個 CSPRNG bytes 的 base64url 編碼 |
+| <code>issued_at</code>／<code>expires_at</code> | UTC Unix seconds；<code>expires_at = issued_at + 900</code>，不得延展 |
+
+簽章 payload 至少必須包含：
+
+- <code>schema_version=1</code>、上述固定 <code>issuer</code>、<code>audience</code>、<code>repository</code> 與 <code>workflow_identifier</code>；
+- <code>controller_cron</code>、<code>controller_scheduled_time</code>、<code>target_date</code>；
+- <code>jti</code>／<code>one_time_nonce</code>、<code>issued_at</code>、<code>expires_at</code>；
+- <code>payload_sha256</code>。
+
+<code>payload_sha256</code> 固定為移除該欄位後、以 UTF-8 RFC 8785 JCS canonical JSON 序列化 assertion payload 的小寫十六進位 SHA-256。JWS 簽章仍覆蓋包含 <code>payload_sha256</code> 的完整 payload。接收端必須同時驗證 JWS 與此 hash，不能只驗其中之一。
+
+<code>target_date</code> 只能由 <code>controller_scheduled_time</code> 轉換為 <code>Asia/Taipei</code> 日期。其時間必須落在該日期 06:00:00 的 ±300000 ms（含端點）內，且驗證時鐘必須滿足 <code>issued_at &lt;= now &lt; expires_at</code>；<code>controller_cron</code>、時區換算、日期、<code>issued_at</code>／<code>expires_at</code> 任一不符即拒絕。
+
+### 6.3 Cloudflare assertion 發行與 handoff state
+
+Cloudflare Watchdog 必須先建立並簽署 assertion，再以 <code>jti</code> 為 deterministic key 寫入一個每一 <code>jti</code> 全域唯一的 Cloudflare Durable Object。它使用 SQLite-backed、強一致交易儲存，是本 Spec 唯一允許的 one-time registry；不得以 KV、cache、read-only 查詢或最終一致性旗標取代。
+
+handoff state 只允許：
+
+| state | 意義 |
+| --- | --- |
+| <code>PENDING_DISPATCH</code> | assertion 已簽署，尚未取得 GitHub run ID |
+| <code>ARMED</code> | Cloudflare 已從 <code>DISPATCH_CONFIRMED.workflow_run_id</code> 寫入預期 GitHub run ID，等待 redemption |
+| <code>REDEEMED</code> | assertion 已由唯一驗證成功的 GitHub run 消耗並產生 receipt |
+
+Cloudflare dispatch 將 <code>handoff_id=jti</code> 帶入 input，但該值不具可信性。取得有效 <code>DISPATCH_CONFIRMED</code> 後，Watchdog 必須在同一 <code>jti</code> registry 中以原子條件更新把 state 從 <code>PENDING_DISPATCH</code> 轉為 <code>ARMED</code>，並保存該 response 的 <code>workflow_run_id</code> 作為 <code>expected_github_run_id</code>。這是 dispatch 後的預綁定，不是最終 redemption。
+
+若 dispatch 不是 <code>DISPATCH_CONFIRMED</code>，或 <code>expected_github_run_id</code> 無法原子寫入，state 不得 <code>ARMED</code>。任何 GitHub run 即使已被建立，也必須因 <code>HANDOFF_NOT_ARMED</code> fail-closed。
+
+### 6.4 GitHub 接收、驗證與一次性 redemption
+
+本 Spec 中的 <code>workflow_run_id</code> 一律指 GitHub Actions context 的 <code>github.run_id</code>。它必須等於 dispatch response 的 <code>workflow_run_id</code>，不是 run number、check run ID 或 attempt。
+
+GitHub workflow 的 redemption job 未來必須取得 <code>id-token: write</code>，以 audience <code>urn:horizon:p0-b2r:redemption:v1</code> 請求 GitHub OIDC JWT。Cloudflare endpoint 必須以 GitHub OIDC JWKS 驗證 JWT，並先比對：
+
+- <code>iss=https://token.actions.githubusercontent.com</code> 與指定 audience；
+- <code>repository=michaelluetw-bit/Horizon</code>；
+- <code>workflow_ref=michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main</code>；
+- <code>ref=refs/heads/main</code>、<code>event_name=workflow_dispatch</code>；
+- JWT 的 <code>run_id</code>、<code>run_attempt</code>、<code>sha</code> 與 request body 中對應欄位完全相同。
+
+GitHub 以 <code>handoff_id</code> 請求 assertion 時，Cloudflare 只可對 state 為 <code>ARMED</code> 且 OIDC <code>run_id</code> 等於 <code>expected_github_run_id</code> 的 caller 回傳 JWS。workflow 必須在任何正式處理前，以 pinned public key 驗證 assertion 的 JWS、<code>kid</code>、issuer、audience、repository、workflow identifier、cron、±5 分鐘時間窗口、台北日期、expiry 與 <code>payload_sha256</code>。
+
+驗證 assertion 後，GitHub 必須向 Cloudflare one-time redemption endpoint 提交：
+
+~~~
+jti
+github.run_id
+github.run_attempt
+github.repository
+github.workflow_ref
+github.sha
+github.event_name
+~~~
+
+endpoint 必須再次驗證 OIDC、assertion 與 request／OIDC fields，然後在同一 Durable Object 的單一原子交易中：
+
+1. 確認 state 為 <code>ARMED</code>；
+2. 確認 <code>jti</code> 尚未使用，且 <code>expected_github_run_id</code> 等於 OIDC <code>run_id</code>；
+3. 寫入 assertion 與完整 GitHub run metadata 的最終綁定；
+4. 將 state 唯一地轉為 <code>REDEEMED</code>；
+5. 產生並保存第 6.5 節 receipt。
+
+同一 <code>jti</code> 的第二次 redemption（包括同一 run 的 retry attempt）必須拒絕。所有無法進行原子條件更新、OIDC claim 不符、state 不符、過期或查無 assertion 的情況，都必須 <code>PROVENANCE_REJECTED</code>；不得以 read-then-write、最終一致性檢查或重試繞過。
+
+### 6.5 Cloudflare-signed redemption receipt
+
+redemption 成功後，endpoint 必須回傳以同一受信任 Ed25519 key 簽署的 receipt envelope。<code>receipt_signature</code> 固定為 JWS Compact Serialization，protected header 固定為 <code>alg=EdDSA</code>、<code>kid=horizon-watchdog-ed25519-v1</code>、<code>typ=application/horizon-provenance-receipt+jws</code>；其 decoded payload 是下列 receipt claims，且不含 <code>receipt_signature</code> 本身：
+
+- assertion <code>jti</code>；
+- <code>controller_cron</code>；
+- <code>controller_scheduled_time</code>；
+- <code>target_date</code>；
+- <code>github_run_id</code>；
+- <code>github_run_attempt</code>；
+- <code>repository</code>；
+- <code>workflow_ref</code>；
+- <code>commit_sha</code>；
+- <code>redeemed_at</code>；
+- <code>receipt_id</code>；
+- <code>provenance_verification_status=verified</code>。
+
+receipt envelope 必須同時包含上述 claims 與 <code>receipt_signature</code>。workflow 必須以同一 pinned public key 驗證 receipt signature，並逐欄比對 receipt、已驗證 assertion 與目前 GitHub context。沒有有效 receipt，即使 assertion 本身簽章有效，也不得接受該 watchdog run。
+
+### 6.6 <code>run-name</code> 的限縮用途
+
+<code>run-name</code> 只能引用 <code>github</code> 與 <code>inputs</code> contexts。它只能作為事件來源、schedule／dispatch 類型與 run number 的人類可讀標籤，不得包含或充當精確 <code>target_date</code>、dispatch response、assertion 或 receipt 的正式 provenance 證據。
+
+### 6.7 三種來源的 manifest 對應
+
+Manifest 的 <code>trigger_source</code> 是驗證後的規範化值；不由 <code>trigger_source</code> input 決定：
 
 | manifest <code>trigger_source</code> | <code>trigger_event</code> | <code>trigger_schedule_expression</code> | actor 記錄 | 允許條件 |
 | --- | --- | --- | --- | --- |
 | <code>primary</code> | <code>schedule</code> | <code>17 21 * * *</code> | <code>null</code> | <code>github.event_name=schedule</code> |
-| <code>watchdog</code> | <code>workflow_dispatch</code> | <code>0 22 * * *</code> | Worker dispatch identity，非 manual actor | input 為 <code>fallback-watchdog</code>，且事後可與 <code>DISPATCH_CONFIRMED</code> 的 run ID 串聯 |
-| <code>manual</code> | <code>workflow_dispatch</code> | <code>null</code> | <code>github.actor</code>，不可為空 | input 為 manual／預設人工來源 |
+| <code>watchdog</code> | <code>workflow_dispatch</code> | receipt 的 <code>controller_cron</code> | receipt 綁定的 Cloudflare handoff | 有效 assertion、OIDC、原子 redemption 與 receipt 全數通過 |
+| <code>manual</code> | <code>workflow_dispatch</code> | <code>null</code> | <code>github.actor</code>，不可為空 | 沒有 <code>handoff_id</code>，且未宣稱 <code>fallback-watchdog</code> |
 
-Worker 必須在 dispatch 前驗證 <code>controller.cron</code>；workflow 必須在 pipeline 前驗證 event、input 與這張表的內部對應。任一來源、event、cron、actor 或 <code>target_date</code> 契約不符時皆 fail-closed，不執行 pipeline、不建立或更新 PR。
+人工 dispatch 即使輸入 <code>fallback-watchdog</code>、<code>target_date</code> 或已知 <code>handoff_id</code>，也不能成為 watchdog；它的 GitHub <code>run_id</code> 不等於 <code>expected_github_run_id</code> 時必須被拒絕。
 
-<code>fallback-watchdog</code> input 本身不能證明呼叫者身分。只有 Worker 的 <code>DISPATCH_CONFIRMED.workflow_run_id</code> 與 GitHub 實際 <code>github.run_id</code> 相同，才可在驗收時標示為已證明的 watchdog fallback。
-
-### 6.4 Non-canonical execution manifest
+### 6.8 Non-canonical execution manifest
 
 每個有效 pipeline run 必須產生一份 JSON execution manifest，僅以 GitHub Actions run artifact 上傳。它不是 repo 檔案、不是 Vault 內容、不是第二個 canonical 資料庫，也不改變四份 Markdown 的任何位元組。
 
 Manifest 至少包含：
 
-- <code>schema_version</code>、<code>timezone=Asia/Taipei</code>、<code>target_date</code>
-- <code>configured_primary_schedule_expression</code>
-- <code>configured_watchdog_schedule_expression</code>
-- <code>trigger_source</code>、<code>trigger_event</code>、<code>trigger_schedule_expression</code>
-- <code>workflow_started_at</code>、<code>workflow_completed_at</code>；Watchdog controller 的 <code>scheduled_time</code>、<code>invocation_started_at</code> 與 <code>invocation_delta_ms</code> 仍以第 5.4 節可由 run ID 串聯的 Worker log 為權威，不得在 workflow 端自行推導
-- GitHub <code>run_id</code>、<code>run_attempt</code>、workflow SHA、workflow file、head SHA 與 branch
-- manual 的 <code>github.actor</code>，或 watchdog 的 dispatch correlation reference
-- 四份 canonical outputs 的精確 <code>path</code> 與生成後位元組的 <code>sha256</code>
+- <code>schema_version</code>、<code>timezone=Asia/Taipei</code>、<code>target_date</code>；
+- <code>configured_primary_schedule_expression</code>、<code>configured_watchdog_schedule_expression</code>；
+- <code>trigger_source</code>、<code>trigger_event</code>、<code>trigger_schedule_expression</code>；
+- <code>workflow_started_at</code>、<code>workflow_completed_at</code>；
+- GitHub <code>run_id</code>、<code>run_attempt</code>、workflow SHA、workflow file、head SHA 與 branch；
+- watchdog 的同一份已驗證 receipt 所載 <code>receipt_id</code>、<code>jti</code>、<code>github_run_id</code>、<code>controller_cron</code>、<code>controller_scheduled_time</code>、<code>target_date</code> 與 <code>provenance_verification_status</code>；
+- manual 的 <code>github.actor</code>；
+- 四份 canonical outputs 的精確 <code>path</code> 與生成後位元組的 <code>sha256</code>。
 
 四份 Markdown 保持既有 canonical generator 格式：不新增 frontmatter，不改正文、標題、檔名或 hash 契約。manifest 中的 hash 只描述既有輸出，不是重寫或正規化輸出的依據。
 
-### 6.5 Step Summary、PR body 與 manifest 一致性 Gate
+### 6.9 Step Summary、PR body 與 manifest 一致性 Gate
 
-Step Summary、PR body 與 manifest 必須由同一份先驗證的 provenance model 生成，並在呼叫建立／更新 PR 前比較下列共同欄位：
+JSON run artifact 就是 execution manifest。watchdog 的 Step Summary、PR body 與 manifest 必須由同一份已驗證 receipt model 生成，且至少一致記錄：
 
-- event、來源、trigger cron、時區與 <code>target_date</code>
-- GitHub run ID、run attempt、workflow SHA 與 manifest artifact 名稱
-- manifest 所列四個 output paths 與 SHA256
+- <code>receipt_id</code>；
+- <code>jti</code>；
+- <code>github_run_id</code>；
+- <code>controller_cron</code>；
+- <code>controller_scheduled_time</code>；
+- <code>target_date</code>；
+- <code>provenance_verification_status</code>。
 
-任一不一致即為 <code>PROVENANCE_MISMATCH</code>，fail-closed，不得建立或更新 PR。PR 建立後、啟用 auto-merge 前仍須回讀 PR body 與預期模型比較；不一致時不得啟用 auto-merge。
-
-PR body 至少保存 event、來源、trigger cron、<code>target_date</code>、時區、run ID／attempt、workflow SHA 與 manifest artifact 名稱。Step Summary 提供相同資訊的可讀摘要。manifest 提供完整結構化欄位與四份 SHA256。
+它們也必須一致記錄 GitHub run attempt、workflow SHA 與 manifest artifact 名稱；manifest 另保存四個 output paths 與 SHA256。任一欄位不一致即為 <code>PROVENANCE_MISMATCH</code>，fail-closed，不得建立或更新 PR。PR 建立後、啟用 auto-merge 前仍須回讀 PR body 與預期 receipt model 比較；不一致時不得啟用 auto-merge。
 
 ## 7. 同日冪等與四檔 canonical Gate
 
@@ -293,6 +398,21 @@ PR body 至少保存 event、來源、trigger cron、<code>target_date</code>、
 - 四檔完整合格、單檔／三檔殘缺、任一檔內容不合格，以及 main／固定發布分支相同 Gate 的結果一致性。
 - Step Summary、PR body 與 manifest 任一共同欄位不一致時，不得建立 PR 或啟用 auto-merge。
 
+### 8.1.1 Authenticated one-time provenance handoff acceptance
+
+下列案例是 future implementation 的驗收契約，不是本輪 TDD 計畫：
+
+1. 合法 Cloudflare assertion 與首次 redemption → <code>ACCEPT</code>，receipt 綁定目前 <code>github.run_id</code>。
+2. 人工 dispatch 冒用 <code>fallback-watchdog</code>、沒有合法 assertion → <code>REJECT</code>。
+3. assertion payload 任一欄位遭修改或 <code>payload_sha256</code> 不符 → <code>REJECT</code>。
+4. assertion 過期、<code>issued_at</code>／<code>expires_at</code> 不合法，或 JWS／<code>kid</code> 不受信任 → <code>REJECT</code>。
+5. 同一 <code>jti</code> 第二次使用（含同 run retry attempt）→ <code>REJECT</code>。
+6. 正確 assertion 由錯誤 repository、workflow、ref、event 或 OIDC audience redemption → <code>REJECT</code>。
+7. <code>controller_scheduled_time</code> 超出核准 ±5 分鐘窗口，或 <code>controller_cron</code> 不符 → <code>REJECT</code>。
+8. assertion <code>target_date</code> 與其 <code>controller_scheduled_time</code> 的 <code>Asia/Taipei</code> 日期不符 → <code>REJECT</code>。
+9. redemption endpoint 不能完成 Durable Object 原子條件更新、state 非 <code>ARMED</code> 或 <code>expected_github_run_id</code> 不符 → <code>REJECT</code>。
+10. receipt 的 GitHub run metadata、receipt fields 或 provenance verification status 與目前 context、Step Summary、PR body、manifest 任一不一致 → <code>REJECT</code>，不得標記正式成功。
+
 ### 8.2 Production acceptance
 
 Production 只採自然觀測，不得為了製造 primary-missing 情境而暫時破壞 primary 排程、修改 cron 或建立長期測試 runtime。
@@ -338,6 +458,9 @@ IMPLEMENTATION LOCATION: NOT APPROVED
 - GitHub schedule 延遲／丟棄說明：<https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule>
 - GitHub workflow-runs API：<https://docs.github.com/en/rest/actions/workflow-runs>
 - GitHub workflow syntax：<https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax>
+- GitHub Actions OIDC claims 與 trust conditions：<https://docs.github.com/en/actions/reference/security/oidc>
 - GitHub workflow dispatch 回傳 run ID：<https://github.blog/changelog/2026-02-19-workflow-dispatch-api-now-returns-run-ids/>
 - Cloudflare Scheduled Handler：<https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/>
 - Cloudflare Cron Triggers：<https://developers.cloudflare.com/workers/configuration/cron-triggers/>
+- Cloudflare Workers Web Crypto：<https://developers.cloudflare.com/workers/runtime-apis/web-crypto/>
+- Cloudflare Durable Objects 強一致交易儲存：<https://developers.cloudflare.com/durable-objects/concepts/what-are-durable-objects/>
