@@ -110,6 +110,8 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 
 若 <code>controller.cron</code> 不等於設定的 Watchdog cron，決策為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_CRON_MISMATCH</code>；不得查詢 GitHub runs、不得 dispatch、不得重試。
 
+<code>scheduled_time</code> 必須對應該 <code>target_date</code> 台北時間的 06:00:00；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 05:55:00–06:05:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
+
 <code>MAX_INVOCATION_LAG_MS</code> 固定為 <code>300000</code>。只有 <code>0 &lt;= invocation_delta_ms &lt;= 300000</code> 可繼續；負延遲或大於上限時為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_delta_ms == 300000</code> 仍屬有效。
 
 ### 5.2 Dispatch request
