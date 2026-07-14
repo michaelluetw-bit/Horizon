@@ -1,7 +1,7 @@
 # Horizon External Watchdog 設計規格
 
 - 日期：2026-07-14
-- 狀態：修正版待唯一一次 Spec／Standards 複審
+- 狀態：P0-B2R TDD 實作中；未部署、未進入生產驗收
 - 範圍：P0-B2R｜Scheduler Recovery
 - Repo：<code>michaelluetw-bit/Horizon</code>
 
@@ -17,7 +17,7 @@ Previous schedule contract is superseded.
 
 ## 2. 範圍與明確排除
 
-本 Spec 只定義日後實作 P0-B2R 時必須遵守的契約；本輪不授權任何程式、workflow、Worker、部署、Vault 或 TDD 實作變更。
+本 Spec 定義 P0-B2R 實作必須遵守的契約。本輪已授權 TDD 實作 workflow、Worker 與測試；Cloudflare 部署、實際手動觸發、Vault 正式驗收與 P0-B3 仍未授權。
 
 - 不新增第二個 GitHub cron。
 - 不把 <code>workflow_dispatch</code> 偽裝為 <code>schedule</code>。
@@ -382,9 +382,9 @@ JSON run artifact 就是 execution manifest。watchdog 的 Step Summary、PR bod
 
 因此 fallback 後才到達的 delayed schedule，最多命中 <code>ALREADY_PUBLISHED</code> 或 <code>ALREADY_IN_PROGRESS</code>，不得產生第二份同日 artifact 或第二張 PR。
 
-## 8. 未來驗收契約（不授權 TDD 計畫或實作）
+## 8. 驗收契約
 
-本節只定義未來實作完成後的可驗收行為，並非 TDD 實作計畫。本輪的 TDD PLAN 狀態為 <code>NOT AUTHORIZED</code>。
+本節定義 TDD 實作與未來生產驗收的可驗收行為；它不授權 Cloudflare 部署、實際手動觸發或 P0-B3。
 
 ### 8.1 Deterministic tests
 
@@ -400,7 +400,7 @@ JSON run artifact 就是 execution manifest。watchdog 的 Step Summary、PR bod
 
 ### 8.1.1 Authenticated one-time provenance handoff acceptance
 
-下列案例是 future implementation 的驗收契約，不是本輪 TDD 計畫：
+下列案例是本輪 TDD 必須覆蓋的驗收契約：
 
 1. 合法 Cloudflare assertion 與首次 redemption → <code>ACCEPT</code>，receipt 綁定目前 <code>github.run_id</code>。
 2. 人工 dispatch 冒用 <code>fallback-watchdog</code>、沒有合法 assertion → <code>REJECT</code>。

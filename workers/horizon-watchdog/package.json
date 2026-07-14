@@ -1,0 +1,13 @@
+{
+  "name": "@horizon/horizon-watchdog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.4",
+    "vitest": "^4.1.10"
+  }
+}

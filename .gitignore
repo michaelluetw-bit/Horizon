@@ -62,3 +62,6 @@ logs/*.log
 todo.txt
 .ruff_cache
 .pytest_cache
+
+# Cloudflare Watchdog local dependencies
+workers/horizon-watchdog/node_modules/

@@ -299,11 +299,13 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     canonical = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
     deployment = (ROOT / ".github/workflows/daily-summary.yml").read_text(encoding="utf-8")
 
-    assert "cron: '17 0 * * *'" in canonical
+    assert "cron: '17 21 * * *'" in canonical
+    assert "cron: '17 0 * * *'" not in canonical
     assert "cron: '0 0 * * *'" not in canonical
     assert "TZ: Asia/Taipei" in canonical
     assert "group: horizon-daily" in canonical
     assert "uv run horizon --hours 24" in canonical
+    assert 'uv run horizon --hours 24 --target-date "$TARGET_DATE"' in canonical
     assert "cp data/config.github.json data/config.json" in canonical
     assert "schedule:" not in deployment
     assert "uv run horizon" not in deployment
@@ -317,7 +319,7 @@ def test_daily_workflow_creates_or_updates_an_app_owned_pull_request() -> None:
     assert "\npermissions:\n  contents: read\n" in workflow
     assert "\npermissions:\n  contents: write\n" not in workflow
     assert "persist-credentials: false" in workflow
-    assert "git add -f data/summaries docs/_posts" in workflow
+    assert "Stage exact canonical artifacts" in workflow
     assert "actions/create-github-app-token@v3" in workflow
     assert "${{ vars.HORIZON_AUTOMATION_APP_CLIENT_ID }}" in workflow
     assert "${{ secrets.HORIZON_AUTOMATION_APP_PRIVATE_KEY }}" in workflow
@@ -334,6 +336,37 @@ def test_daily_workflow_creates_or_updates_an_app_owned_pull_request() -> None:
     assert "git push origin main" not in workflow
     assert "[skip ci]" not in workflow
     assert "GITHUB_TOKEN" not in workflow
+
+
+def test_daily_workflow_requires_verified_provenance_and_exact_four_file_gate() -> None:
+    workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
+
+    run_name = next(line for line in workflow.splitlines() if line.startswith("run-name:"))
+    assert "github" in run_name
+    assert "inputs" in run_name
+    assert "vars" not in run_name
+    assert "workflow_dispatch:" in workflow
+    for input_name in ("trigger_source", "target_date", "handoff_id"):
+        assert f"      {input_name}:" in workflow
+    assert "id-token: write" in workflow
+    assert "workers/horizon-watchdog/src/github-provenance.mjs" in workflow
+    assert "HORIZON_WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}" in workflow
+    assert "HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}" in workflow
+    assert "HORIZON_WATCHDOG_PUBLIC_KEY_JWK: ${{ vars.HORIZON_WATCHDOG_PUBLIC_KEY_JWK }}" in workflow
+    assert "scripts/horizon_daily_gate.py preflight" in workflow
+    assert "--main-ref origin/main" in workflow
+    assert "--publish-ref origin/automation/horizon-daily-publish" in workflow
+    assert "scripts/horizon_daily_gate.py validate" in workflow
+    assert "scripts/horizon_daily_evidence.py render" in workflow
+    assert "actions/upload-artifact@v4" in workflow
+    assert "body-path:" in workflow
+    assert "gh pr view \"$PR_NUMBER\" --repo \"$GITHUB_REPOSITORY\" --json body --jq .body" in workflow
+    assert "scripts/horizon_daily_evidence.py verify-pr-body" in workflow
+    assert "data/summaries/horizon-${{ steps.provenance.outputs.target_date }}-zh.md" in workflow
+    assert "data/summaries/horizon-${{ steps.provenance.outputs.target_date }}-en.md" in workflow
+    assert "docs/_posts/${{ steps.provenance.outputs.target_date }}-summary-zh.md" in workflow
+    assert "docs/_posts/${{ steps.provenance.outputs.target_date }}-summary-en.md" in workflow
+    assert "git add -f data/summaries docs/_posts" not in workflow
 
 
 def test_force_add_stages_ignored_generated_artifacts(tmp_path: Path) -> None:
@@ -392,6 +425,16 @@ def test_ci_requires_blocking_ruff_from_the_locked_dev_extra() -> None:
     assert "continue-on-error: true" not in ruff_job
     assert "uv sync --locked --extra dev" in ruff_job
     assert "uv run ruff check ." in ruff_job
+
+
+def test_ci_runs_the_watchdog_contract_suite_without_deployment() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "  watchdog:" in workflow
+    assert "workers/horizon-watchdog" in workflow
+    assert "npm ci" in workflow
+    assert "npm test" in workflow
+    assert "wrangler deploy" not in workflow
 
 
 def test_cloud_config_is_valid_and_excludes_paused_categories() -> None:
