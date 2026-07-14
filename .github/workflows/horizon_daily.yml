@@ -5,6 +5,7 @@ run-name: "Horizon Daily ${{ github.event_name }} / ${{ inputs.trigger_source ||
 on:
   schedule:
     - cron: '17 21 * * *'  # 每天 UTC 21:17（台灣時間 05:17）
+    - cron: '50 23 * * *'  # 暫時驗證：每天 UTC 23:50（台灣時間 07:50）
   workflow_dispatch:
     inputs:
       trigger_source:
