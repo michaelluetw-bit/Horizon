@@ -3,7 +3,7 @@
 import asyncio
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Optional
 from urllib.parse import urlparse
@@ -40,6 +40,19 @@ class BalancedDigestResult:
     duplicate_categories: List[str] = field(default_factory=list)
 
 
+def resolve_publication_date(target_date: str | None) -> str:
+    """Return an exact ISO date supplied by verified workflow provenance."""
+    if target_date is None:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        parsed = date.fromisoformat(target_date)
+    except (TypeError, ValueError) as error:
+        raise ValueError("target_date must use YYYY-MM-DD") from error
+    if parsed.isoformat() != target_date:
+        raise ValueError("target_date must use YYYY-MM-DD")
+    return target_date
+
+
 class HorizonOrchestrator:
     """Orchestrates the complete workflow for content aggregation and analysis."""
 
@@ -60,12 +73,14 @@ class HorizonOrchestrator:
             else None
         )
 
-    async def run(self, force_hours: int = None) -> None:
+    async def run(self, force_hours: int = None, target_date: str | None = None) -> None:
         """Execute the complete workflow.
 
         Args:
             force_hours: Optional override for time window in hours
+            target_date: Verified YYYY-MM-DD artifact date supplied by the workflow.
         """
+        publication_date = resolve_publication_date(target_date)
         self.console.print("[bold cyan]🌅 Horizon - Starting aggregation...[/bold cyan]\n")
 
         # Check email subscriptions if configured
@@ -138,7 +153,7 @@ class HorizonOrchestrator:
             self.console.print("")
 
             # 7. Generate and save daily summaries for each configured language
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            today = publication_date
             for lang in self.config.ai.languages:
                 summarizer = DailySummarizer()
                 summary = await summarizer.generate_summary(important_items, today, len(all_items), language=lang)

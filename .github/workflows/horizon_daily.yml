@@ -1,9 +1,24 @@
 name: Horizon Daily Aggregation
 
+run-name: "Horizon Daily ${{ github.event_name }} / ${{ inputs.trigger_source || 'primary-or-manual' }} #${{ github.run_number }}"
+
 on:
   schedule:
-    - cron: '17 0 * * *'  # 每天 UTC 00:17（台灣時間 08:17）
+    - cron: '17 21 * * *'  # 每天 UTC 21:17（台灣時間 05:17）
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: Display-only source label; never trusted as provenance.
+        required: false
+        type: string
+      target_date:
+        description: Display-only Taipei date; watchdog receipt remains authoritative.
+        required: false
+        type: string
+      handoff_id:
+        description: Watchdog one-time handoff lookup handle.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -15,44 +30,186 @@ concurrency:
 jobs:
   aggregate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     env:
       TZ: Asia/Taipei
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Initialize execution evidence directory
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/horizon-evidence"
+          mkdir -p "$evidence_dir"
+          echo "HORIZON_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+
+      - name: Capture workflow start
+        id: workflow-start
+        run: echo "workflow_started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+
+      - name: Prepare verified execution provenance
+        id: provenance
+        env:
+          HORIZON_PROVENANCE_PATH: ${{ runner.temp }}/horizon-evidence/provenance.json
+          HORIZON_TRIGGER_SOURCE: ${{ inputs.trigger_source }}
+          HORIZON_TARGET_DATE: ${{ inputs.target_date }}
+          HORIZON_HANDOFF_ID: ${{ inputs.handoff_id }}
+          HORIZON_WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}
+          HORIZON_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}
+          HORIZON_WATCHDOG_PUBLIC_KEY_JWK: ${{ vars.HORIZON_WATCHDOG_PUBLIC_KEY_JWK }}
+        run: |
+          node workers/horizon-watchdog/src/github-provenance.mjs
+
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
+      - name: Fetch canonical refs
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if git ls-remote --exit-code --heads origin automation/horizon-daily-publish >/dev/null; then
+            git fetch --no-tags origin \
+              +refs/heads/automation/horizon-daily-publish:refs/remotes/origin/automation/horizon-daily-publish
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then
+              exit "$status"
+            fi
+          fi
+
+      - name: Canonical preflight
+        id: preflight
+        env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+        run: |
+          python scripts/horizon_daily_gate.py preflight \
+            --repository "$GITHUB_WORKSPACE" \
+            --target-date "$TARGET_DATE" \
+            --main-ref origin/main \
+            --publish-ref origin/automation/horizon-daily-publish \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Record idempotent no-op
+        if: steps.preflight.outputs.decision != 'READY'
+        env:
+          DECISION: ${{ steps.preflight.outputs.decision }}
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+        run: |
+          echo "## Horizon daily idempotent no-op" >> "$GITHUB_STEP_SUMMARY"
+          echo "- decision: \`$DECISION\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- target_date: \`$TARGET_DATE\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        if: steps.preflight.outputs.decision == 'READY'
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Sync dependencies
+        if: steps.preflight.outputs.decision == 'READY'
         run: uv sync
 
       - name: Prepare canonical cloud config
+        if: steps.preflight.outputs.decision == 'READY'
         run: cp data/config.github.json data/config.json
 
       - name: Run Horizon pipeline
+        if: steps.preflight.outputs.decision == 'READY'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PYTHONIOENCODING: 'utf-8'
-        run: |
-          uv run horizon --hours 24
+        run: uv run horizon --hours 24 --target-date "$TARGET_DATE"
 
-      - name: Stage generated artifacts
-        run: git add -f data/summaries docs/_posts
+      - name: Validate four canonical outputs
+        if: steps.preflight.outputs.decision == 'READY'
+        env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+        run: |
+          python scripts/horizon_daily_gate.py validate \
+            --root "$GITHUB_WORKSPACE" \
+            --target-date "$TARGET_DATE"
+
+      - name: Stage exact canonical artifacts
+        if: steps.preflight.outputs.decision == 'READY'
+        env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+        run: |
+          git add -f \
+            "data/summaries/horizon-$TARGET_DATE-zh.md" \
+            "data/summaries/horizon-$TARGET_DATE-en.md" \
+            "docs/_posts/$TARGET_DATE-summary-zh.md" \
+            "docs/_posts/$TARGET_DATE-summary-en.md"
+
+      - name: Verify staged artifact boundary
+        if: steps.preflight.outputs.decision == 'READY'
+        env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+        run: |
+          set -euo pipefail
+          expected=$(printf '%s\n' \
+            "data/summaries/horizon-$TARGET_DATE-en.md" \
+            "data/summaries/horizon-$TARGET_DATE-zh.md" \
+            "docs/_posts/$TARGET_DATE-summary-en.md" \
+            "docs/_posts/$TARGET_DATE-summary-zh.md" | LC_ALL=C sort)
+          actual=$(git diff --cached --name-only | LC_ALL=C sort)
+          if [ "$actual" != "$expected" ]; then
+            echo "CANONICAL_SET_INCOMPLETE:STAGED_ARTIFACT_BOUNDARY" >&2
+            git diff --cached --name-only >&2
+            exit 1
+          fi
+
+      - name: Render execution evidence
+        if: steps.preflight.outputs.decision == 'READY'
+        env:
+          TARGET_DATE: ${{ steps.provenance.outputs.target_date }}
+          PROVENANCE_PATH: ${{ runner.temp }}/horizon-evidence/provenance.json
+          WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}
+          HORIZON_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          ARTIFACT_NAME: horizon-execution-manifest-${{ github.run_id }}
+        run: |
+          python scripts/horizon_daily_evidence.py render \
+            --root "$GITHUB_WORKSPACE" \
+            --target-date "$TARGET_DATE" \
+            --provenance "$PROVENANCE_PATH" \
+            --manifest "$HORIZON_EVIDENCE_DIR/execution-manifest.json" \
+            --pr-body "$HORIZON_EVIDENCE_DIR/pr-body.md" \
+            --step-summary "$GITHUB_STEP_SUMMARY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --workflow-sha "$HORIZON_WORKFLOW_SHA" \
+            --head-sha "$GITHUB_SHA" \
+            --branch "$GITHUB_REF_NAME" \
+            --workflow-started-at "$WORKFLOW_STARTED_AT" \
+            --workflow-completed-at "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+            --artifact-name "$ARTIFACT_NAME"
+
+      - name: Upload execution manifest
+        if: steps.preflight.outputs.decision == 'READY'
+        uses: actions/upload-artifact@v6
+        with:
+          name: horizon-execution-manifest-${{ github.run_id }}
+          path: ${{ runner.temp }}/horizon-evidence/execution-manifest.json
+          if-no-files-found: error
 
       - name: Create GitHub App installation token
+        if: steps.preflight.outputs.decision == 'READY'
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
@@ -62,23 +219,35 @@ jobs:
           permission-pull-requests: write
 
       - name: Create or update daily publish pull request
+        if: steps.preflight.outputs.decision == 'READY'
         id: daily-publish-pr
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ steps.app-token.outputs.token }}
           branch-token: ${{ steps.app-token.outputs.token }}
           add-paths: |
-            data/summaries
-            docs/_posts
+            data/summaries/horizon-${{ steps.provenance.outputs.target_date }}-zh.md
+            data/summaries/horizon-${{ steps.provenance.outputs.target_date }}-en.md
+            docs/_posts/${{ steps.provenance.outputs.target_date }}-summary-zh.md
+            docs/_posts/${{ steps.provenance.outputs.target_date }}-summary-en.md
           branch: automation/horizon-daily-publish
           base: main
           delete-branch: true
           commit-message: "docs: 雲端自動生成每日快報"
           title: "docs: 雲端自動生成每日快報"
-          body: |
-            此 PR 由 Horizon Daily Aggregation 自動建立或更新。
+          body-path: ${{ runner.temp }}/horizon-evidence/pr-body.md
 
-            `ruff` 與 `test` 均通過後，GitHub 會依 repository auto-merge 設定自動合併。
+      - name: Verify pull request provenance readback
+        if: steps.daily-publish-pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.daily-publish-pr.outputs.pull-request-number }}
+        run: |
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body \
+            > "$HORIZON_EVIDENCE_DIR/pr-body-readback.md"
+          python scripts/horizon_daily_evidence.py verify-pr-body \
+            --manifest "$HORIZON_EVIDENCE_DIR/execution-manifest.json" \
+            --pr-body "$HORIZON_EVIDENCE_DIR/pr-body-readback.md"
 
       - name: Enable auto-merge for daily publish pull request
         if: steps.daily-publish-pr.outputs.pull-request-number != ''

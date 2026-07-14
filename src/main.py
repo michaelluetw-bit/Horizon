@@ -37,6 +37,7 @@ def main():
 
     parser = argparse.ArgumentParser(description="Horizon - AI-Driven Information Aggregation System")
     parser.add_argument("--hours", type=int, help="Force fetch from last N hours")
+    parser.add_argument("--target-date", help="Verified YYYY-MM-DD date for generated daily artifacts")
     args = parser.parse_args()
 
     try:
@@ -74,7 +75,7 @@ def main():
 
         # Create and run orchestrator
         orchestrator = HorizonOrchestrator(config, storage)
-        asyncio.run(orchestrator.run(force_hours=args.hours))
+        asyncio.run(orchestrator.run(force_hours=args.hours, target_date=args.target_date))
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠️  Interrupted by user[/yellow]")

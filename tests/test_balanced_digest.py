@@ -15,7 +15,7 @@ from src.models import (
     SourceType,
     SourcesConfig,
 )
-from src.orchestrator import HorizonOrchestrator
+from src.orchestrator import HorizonOrchestrator, resolve_publication_date
 
 
 def make_item(item_id: str, score: float, category: str | None) -> ContentItem:
@@ -187,3 +187,53 @@ def test_run_applies_balanced_digest_before_enrichment(tmp_path, monkeypatch) ->
     asyncio.run(orchestrator.run())
 
     assert summary_ids == ["ai"]
+
+
+def test_run_uses_the_verified_target_date_for_all_generated_artifact_names(tmp_path, monkeypatch) -> None:
+    config = Config(
+        ai=AIConfig(
+            provider="openai",
+            model="test",
+            api_key_env="TEST_API_KEY",
+            languages=["en"],
+        ),
+        sources=SourcesConfig(),
+        filtering=FilteringConfig(ai_score_threshold=7.0),
+    )
+    saved_dates: list[tuple[str, str]] = []
+    storage = SimpleNamespace(
+        save_daily_summary=lambda date, summary, language="en": saved_dates.append((date, language))
+    )
+    orchestrator = HorizonOrchestrator(config, storage)
+    items = [make_item("daily", 9.0, "ai")]
+
+    async def fetch_all_sources(since):  # type: ignore[no-untyped-def]
+        return items
+
+    async def analyze_content(input_items):  # type: ignore[no-untyped-def]
+        return input_items
+
+    async def merge_topic_duplicates(input_items):  # type: ignore[no-untyped-def]
+        return input_items
+
+    async def generate_summary(self, items, date, total_fetched, language="en"):  # type: ignore[no-untyped-def]
+        return f"# Horizon Daily - {date}\n\nGenerated body.\n"
+
+    from src.ai.summarizer import DailySummarizer
+
+    monkeypatch.setattr(orchestrator, "fetch_all_sources", fetch_all_sources)
+    monkeypatch.setattr(orchestrator, "_analyze_content", analyze_content)
+    monkeypatch.setattr(orchestrator, "merge_topic_duplicates", merge_topic_duplicates)
+    monkeypatch.setattr(DailySummarizer, "generate_summary", generate_summary)
+    monkeypatch.chdir(tmp_path)
+
+    asyncio.run(orchestrator.run(target_date="2026-07-14"))
+
+    assert saved_dates == [("2026-07-14", "en")]
+    assert (tmp_path / "docs" / "_posts" / "2026-07-14-summary-en.md").is_file()
+
+
+@pytest.mark.parametrize("target_date", ["2026-7-14", "2026-02-30", "not-a-date"])
+def test_explicit_publication_date_requires_exact_iso_date(target_date: str) -> None:
+    with pytest.raises(ValueError, match="target_date must use YYYY-MM-DD"):
+        resolve_publication_date(target_date)

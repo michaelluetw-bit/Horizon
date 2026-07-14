@@ -15,10 +15,12 @@ jobs:
     # Phase 1: report lint findings without blocking merges.
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
       - run: uv sync --locked --extra dev
       - run: uv run ruff check .
 
@@ -27,9 +29,24 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: uv sync --locked --extra dev
       - run: uv run pytest -q
+
+  watchdog:
+    name: watchdog
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Install watchdog test dependencies
+        working-directory: workers/horizon-watchdog
+        run: npm ci
+      - name: Run watchdog contracts
+        working-directory: workers/horizon-watchdog
+        run: npm test
