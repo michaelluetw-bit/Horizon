@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -55,7 +55,7 @@ jobs:
         run: echo "workflow_started_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -74,7 +74,7 @@ jobs:
           node workers/horizon-watchdog/src/github-provenance.mjs
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -116,7 +116,7 @@ jobs:
 
       - name: Install uv
         if: steps.preflight.outputs.decision == 'READY'
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload execution manifest
         if: steps.preflight.outputs.decision == 'READY'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: horizon-execution-manifest-${{ github.run_id }}
           path: ${{ runner.temp }}/horizon-evidence/execution-manifest.json

@@ -361,7 +361,7 @@ def test_daily_workflow_requires_verified_provenance_and_exact_four_file_gate() 
     assert "--publish-ref origin/automation/horizon-daily-publish" in workflow
     assert "scripts/horizon_daily_gate.py validate" in workflow
     assert "scripts/horizon_daily_evidence.py render" in workflow
-    assert "actions/upload-artifact@v4" in workflow
+    assert "actions/upload-artifact@v6" in workflow
     assert "body-path:" in workflow
     assert "gh pr view \"$PR_NUMBER\" --repo \"$GITHUB_REPOSITORY\" --json body --jq .body" in workflow
     assert "scripts/horizon_daily_evidence.py verify-pr-body" in workflow
@@ -438,6 +438,31 @@ def test_ci_runs_the_watchdog_contract_suite_without_deployment() -> None:
     assert "npm ci" in workflow
     assert "npm test" in workflow
     assert "wrangler deploy" not in workflow
+
+
+def test_workflows_use_node24_action_runtimes() -> None:
+    ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    daily_workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
+    combined_workflows = f"{ci_workflow}\n{daily_workflow}"
+
+    for action in (
+        "actions/checkout@v6",
+        "actions/setup-node@v5",
+        "actions/setup-python@v6",
+        "astral-sh/setup-uv@v7",
+    ):
+        assert action in ci_workflow
+        assert action in daily_workflow
+    assert "actions/upload-artifact@v6" in daily_workflow
+    for deprecated_action in (
+        "actions/checkout@v4",
+        "actions/setup-node@v4",
+        "actions/setup-python@v5",
+        "astral-sh/setup-uv@v3",
+        "astral-sh/setup-uv@v6",
+        "actions/upload-artifact@v4",
+    ):
+        assert deprecated_action not in combined_workflows
 
 
 def test_cloud_config_is_valid_and_excludes_paused_categories() -> None:
