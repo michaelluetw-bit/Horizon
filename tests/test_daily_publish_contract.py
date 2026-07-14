@@ -430,6 +430,15 @@ def test_ci_requires_blocking_ruff_from_the_locked_dev_extra() -> None:
     assert "uv run ruff check ." in ruff_job
 
 
+def test_ci_uses_a_single_uv_cache_writer() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    ruff_job = workflow.split("  ruff:", 1)[1].split("  test:", 1)[0]
+    test_job = workflow.split("  test:", 1)[1].split("  watchdog:", 1)[0]
+
+    assert "enable-cache: false" in ruff_job
+    assert "enable-cache: false" not in test_job
+
+
 def test_ci_runs_the_watchdog_contract_suite_without_deployment() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
