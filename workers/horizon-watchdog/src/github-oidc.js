@@ -29,25 +29,35 @@ function parseJwt(token) {
   };
 }
 
-function claimsAreExpected(claims, audience, nowSeconds) {
-  return (
+function positiveSafeIntegerClaim(value) {
+  if (Number.isSafeInteger(value) && value > 0) return value;
+  if (typeof value !== "string" || !/^[1-9][0-9]*$/.test(value)) return null;
+  const normalized = Number(value);
+  return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
+}
+
+function normalizedExpectedClaims(claims, audience, nowSeconds) {
+  const runId = positiveSafeIntegerClaim(claims.run_id);
+  const runAttempt = positiveSafeIntegerClaim(claims.run_attempt);
+  if (
     claims.iss === GITHUB_OIDC_ISSUER &&
     claims.aud === audience &&
     claims.repository === HORIZON_REPOSITORY &&
     claims.workflow_ref === HORIZON_WORKFLOW_REF &&
     claims.ref === "refs/heads/main" &&
     claims.event_name === "workflow_dispatch" &&
-    Number.isInteger(claims.run_id) &&
-    claims.run_id > 0 &&
-    Number.isInteger(claims.run_attempt) &&
-    claims.run_attempt > 0 &&
+    runId !== null &&
+    runAttempt !== null &&
     typeof claims.sha === "string" &&
     /^[a-f0-9]{40}$/i.test(claims.sha) &&
     Number.isInteger(claims.nbf) &&
     Number.isInteger(claims.exp) &&
     claims.nbf <= nowSeconds &&
     nowSeconds < claims.exp
-  );
+  ) {
+    return { ...claims, run_id: runId, run_attempt: runAttempt };
+  }
+  return null;
 }
 
 export async function verifyGithubOidc({ token, audience, nowMs, fetchImpl }) {
@@ -96,8 +106,9 @@ export async function verifyGithubOidc({ token, audience, nowMs, fetchImpl }) {
     return { accepted: false, reason: "OIDC_SIGNATURE_INVALID" };
   }
 
-  if (!claimsAreExpected(parsed.claims, audience, Math.floor(nowMs / 1000))) {
+  const claims = normalizedExpectedClaims(parsed.claims, audience, Math.floor(nowMs / 1000));
+  if (!claims) {
     return { accepted: false, reason: "OIDC_CLAIMS_INVALID" };
   }
-  return { accepted: true, claims: parsed.claims };
+  return { accepted: true, claims };
 }

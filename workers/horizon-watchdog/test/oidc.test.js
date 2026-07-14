@@ -72,6 +72,25 @@ describe("verifyGithubOidc", () => {
     expect(fetchImpl).toHaveBeenCalledWith(GITHUB_OIDC_JWKS_URL);
   });
 
+  it("accepts GitHub's positive decimal string run metadata and normalizes it", async () => {
+    const { privateKey, publicJwk } = await githubKeyPair();
+    const token = await makeGithubOidcToken(privateKey, {
+      ...validClaims(),
+      run_id: "12345",
+      run_attempt: "1",
+    });
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ keys: [publicJwk] }), { status: 200 }),
+    );
+
+    await expect(
+      verifyGithubOidc({ token, audience: AUDIENCE, nowMs: NOW_MS, fetchImpl }),
+    ).resolves.toMatchObject({
+      accepted: true,
+      claims: expect.objectContaining({ run_id: 12345, run_attempt: 1 }),
+    });
+  });
+
   it.each([
     ["repository", { repository: "attacker/Horizon" }],
     [
@@ -81,6 +100,8 @@ describe("verifyGithubOidc", () => {
     ["ref", { ref: "refs/heads/release" }],
     ["event_name", { event_name: "schedule" }],
     ["audience", { aud: "urn:horizon:other" }],
+    ["run_id", { run_id: "not-a-run-id" }],
+    ["run_attempt", { run_attempt: "0" }],
   ])("rejects a correctly signed token with an unexpected %s claim", async (_field, mutation) => {
     const { privateKey, publicJwk } = await githubKeyPair();
     const token = await makeGithubOidcToken(privateKey, {
