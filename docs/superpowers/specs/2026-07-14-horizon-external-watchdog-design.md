@@ -232,3 +232,10 @@ P0-B2R 必須分兩種真實路徑取證：
 5. P0-B2R 驗收記錄。
 
 不進行相鄰重構，不修改 Horizon 摘要策略、內容生成邏輯、PR 門禁、Hosted Dashboard 或 Obsidian 發布流程。
+
+## 11. 官方依據
+
+- GitHub schedule 延遲／丟棄說明：<https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule>
+- Workflow runs 查詢 API：<https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow>
+- Workflow dispatch API 與 `Actions: write` 權限：<https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event>
+- Workflow concurrency 行為：<https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency>
