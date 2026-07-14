@@ -230,10 +230,10 @@ handoff state 只允許：
 | state | 意義 |
 | --- | --- |
 | <code>PENDING_DISPATCH</code> | assertion 已簽署，尚未取得 GitHub run ID |
-| <code>ARMED</code> | Cloudflare 已從 <code>DISPATCH_CONFIRMED.workflow_run_id</code> 寫入預期 GitHub run ID，等待 redemption |
+| <code>ARMED</code> | Cloudflare 已從 <code>DISPATCH_CONFIRMED.workflow_run_id</code> 寫入預期 GitHub run ID 與初始 attempt <code>1</code>，等待 redemption |
 | <code>REDEEMED</code> | assertion 已由唯一驗證成功的 GitHub run 消耗並產生 receipt |
 
-Cloudflare dispatch 將 <code>handoff_id=jti</code> 帶入 input，但該值不具可信性。取得有效 <code>DISPATCH_CONFIRMED</code> 後，Watchdog 必須在同一 <code>jti</code> registry 中以原子條件更新把 state 從 <code>PENDING_DISPATCH</code> 轉為 <code>ARMED</code>，並保存該 response 的 <code>workflow_run_id</code> 作為 <code>expected_github_run_id</code>。這是 dispatch 後的預綁定，不是最終 redemption。
+Cloudflare dispatch 將 <code>handoff_id=jti</code> 帶入 input，但該值不具可信性。取得有效 <code>DISPATCH_CONFIRMED</code> 後，Watchdog 必須在同一 <code>jti</code> registry 中以原子條件更新把 state 從 <code>PENDING_DISPATCH</code> 轉為 <code>ARMED</code>，並保存該 response 的 <code>workflow_run_id</code> 作為 <code>expected_github_run_id</code>，以及 <code>expected_github_run_attempt=1</code>。這是 dispatch 後的預綁定，不是最終 redemption。
 
 若 dispatch 不是 <code>DISPATCH_CONFIRMED</code>，或 <code>expected_github_run_id</code> 無法原子寫入，state 不得 <code>ARMED</code>。任何 GitHub run 即使已被建立，也必須因 <code>HANDOFF_NOT_ARMED</code> fail-closed。
 
@@ -249,7 +249,7 @@ GitHub workflow 的 redemption job 未來必須取得 <code>id-token: write</cod
 - <code>ref=refs/heads/main</code>、<code>event_name=workflow_dispatch</code>；
 - JWT 的 <code>run_id</code>、<code>run_attempt</code>、<code>sha</code> 與 request body 中對應欄位完全相同。
 
-GitHub 以 <code>handoff_id</code> 請求 assertion 時，Cloudflare 只可對 state 為 <code>ARMED</code> 且 OIDC <code>run_id</code> 等於 <code>expected_github_run_id</code> 的 caller 回傳 JWS。workflow 必須在任何正式處理前，以 pinned public key 驗證 assertion 的 JWS、<code>kid</code>、issuer、audience、repository、workflow identifier、cron、±5 分鐘時間窗口、台北日期、expiry 與 <code>payload_sha256</code>。
+GitHub 以 <code>handoff_id</code> 請求 assertion 時，Cloudflare 只可對 state 為 <code>ARMED</code>、OIDC <code>run_id</code> 等於 <code>expected_github_run_id</code>，且 OIDC <code>run_attempt=1</code> 的 caller 回傳 JWS。workflow 必須在任何正式處理前，以 pinned public key 驗證 assertion 的 JWS、<code>kid</code>、issuer、audience、repository、workflow identifier、cron、±5 分鐘時間窗口、台北日期、expiry 與 <code>payload_sha256</code>。
 
 驗證 assertion 後，GitHub 必須向 Cloudflare one-time redemption endpoint 提交：
 
@@ -266,12 +266,12 @@ github.event_name
 endpoint 必須再次驗證 OIDC、assertion 與 request／OIDC fields，然後在同一 Durable Object 的單一原子交易中：
 
 1. 確認 state 為 <code>ARMED</code>；
-2. 確認 <code>jti</code> 尚未使用，且 <code>expected_github_run_id</code> 等於 OIDC <code>run_id</code>；
+2. 確認 <code>jti</code> 尚未使用，且 <code>expected_github_run_id</code> 等於 OIDC <code>run_id</code>、<code>expected_github_run_attempt=1</code> 等於 OIDC <code>run_attempt</code>；
 3. 寫入 assertion 與完整 GitHub run metadata 的最終綁定；
 4. 將 state 唯一地轉為 <code>REDEEMED</code>；
 5. 產生並保存第 6.5 節 receipt。
 
-同一 <code>jti</code> 的第二次 redemption（包括同一 run 的 retry attempt）必須拒絕。所有無法進行原子條件更新、OIDC claim 不符、state 不符、過期或查無 assertion 的情況，都必須 <code>PROVENANCE_REJECTED</code>；不得以 read-then-write、最終一致性檢查或重試繞過。
+同一 <code>jti</code> 的第二次 redemption（包括同一 run 的 retry attempt），或首次 redemption 但 <code>run_attempt</code> 不是 <code>1</code>，都必須拒絕。所有無法進行原子條件更新、OIDC claim 不符、state 不符、過期或查無 assertion 的情況，都必須 <code>PROVENANCE_REJECTED</code>；不得以 read-then-write、最終一致性檢查或重試繞過。
 
 ### 6.5 Cloudflare-signed redemption receipt
 
@@ -306,7 +306,7 @@ Manifest 的 <code>trigger_source</code> 是驗證後的規範化值；不由 <c
 | <code>watchdog</code> | <code>workflow_dispatch</code> | receipt 的 <code>controller_cron</code> | receipt 綁定的 Cloudflare handoff | 有效 assertion、OIDC、原子 redemption 與 receipt 全數通過 |
 | <code>manual</code> | <code>workflow_dispatch</code> | <code>null</code> | <code>github.actor</code>，不可為空 | 沒有 <code>handoff_id</code>，且未宣稱 <code>fallback-watchdog</code> |
 
-人工 dispatch 即使輸入 <code>fallback-watchdog</code>、<code>target_date</code> 或已知 <code>handoff_id</code>，也不能成為 watchdog；它的 GitHub <code>run_id</code> 不等於 <code>expected_github_run_id</code> 時必須被拒絕。
+人工 dispatch 即使輸入 <code>fallback-watchdog</code>、<code>target_date</code> 或已知 <code>handoff_id</code>，也不能成為 watchdog；它的 GitHub <code>run_id</code>／<code>run_attempt</code> 不等於預期值時必須被拒絕。
 
 ### 6.8 Non-canonical execution manifest
 
@@ -406,7 +406,7 @@ JSON run artifact 就是 execution manifest。watchdog 的 Step Summary、PR bod
 2. 人工 dispatch 冒用 <code>fallback-watchdog</code>、沒有合法 assertion → <code>REJECT</code>。
 3. assertion payload 任一欄位遭修改或 <code>payload_sha256</code> 不符 → <code>REJECT</code>。
 4. assertion 過期、<code>issued_at</code>／<code>expires_at</code> 不合法，或 JWS／<code>kid</code> 不受信任 → <code>REJECT</code>。
-5. 同一 <code>jti</code> 第二次使用（含同 run retry attempt）→ <code>REJECT</code>。
+5. 同一 <code>jti</code> 第二次使用（含同 run retry attempt），或首次 redemption 使用非 <code>1</code> 的 run attempt → <code>REJECT</code>。
 6. 正確 assertion 由錯誤 repository、workflow、ref、event 或 OIDC audience redemption → <code>REJECT</code>。
 7. <code>controller_scheduled_time</code> 超出核准 ±5 分鐘窗口，或 <code>controller_cron</code> 不符 → <code>REJECT</code>。
 8. assertion <code>target_date</code> 與其 <code>controller_scheduled_time</code> 的 <code>Asia/Taipei</code> 日期不符 → <code>REJECT</code>。
