@@ -43,6 +43,7 @@ export function githubContext(env) {
     workflow_ref: required(env, "HORIZON_GITHUB_WORKFLOW_REF"),
     commit_sha: commitSha,
     event_name: required(env, "GITHUB_EVENT_NAME"),
+    event_schedule: env.GITHUB_EVENT_SCHEDULE ?? "",
   };
 }
 
@@ -75,13 +76,18 @@ export async function prepareProvenance({
     if (!Number.isInteger(primaryStartedAtMs)) {
       throw new Error("PROVENANCE_REJECTED:PRIMARY_START_TIME_INVALID");
     }
+    const actualCron = context.event_schedule;
+    if (!actualCron) {
+      throw new Error("PROVENANCE_REJECTED:MISSING_EVENT_SCHEDULE");
+    }
     const targetDate = taipeiToday(primaryStartedAtMs);
+    const isPrimary = actualCron === PRIMARY_CRON;
     return {
-      trigger_source: "primary",
+      trigger_source: isPrimary ? "primary" : "scheduled-verification",
       trigger_event: "schedule",
-      trigger_schedule_expression: PRIMARY_CRON,
+      trigger_schedule_expression: actualCron,
       target_date: targetDate,
-      primary_schedule_on_time: isPrimaryScheduleOnTime(primaryStartedAtMs, targetDate),
+      primary_schedule_on_time: isPrimary && isPrimaryScheduleOnTime(primaryStartedAtMs, targetDate),
       github: context,
     };
   }

@@ -68,6 +68,7 @@ jobs:
           HORIZON_TRIGGER_SOURCE: ${{ inputs.trigger_source }}
           HORIZON_TARGET_DATE: ${{ inputs.target_date }}
           HORIZON_HANDOFF_ID: ${{ inputs.handoff_id }}
+          GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
           HORIZON_WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}
           HORIZON_GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
           HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}

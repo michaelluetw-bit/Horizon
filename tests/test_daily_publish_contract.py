@@ -361,6 +361,7 @@ def test_daily_workflow_requires_verified_provenance_and_exact_four_file_gate() 
     assert 'evidence_dir="$RUNNER_TEMP/horizon-evidence"' in workflow
     assert 'echo "HORIZON_EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"' in workflow
     assert "HORIZON_WORKFLOW_STARTED_AT: ${{ steps.workflow-start.outputs.workflow_started_at }}" in workflow
+    assert "GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}" in workflow
     assert "HORIZON_WATCHDOG_URL: ${{ vars.HORIZON_WATCHDOG_URL }}" in workflow
     assert "HORIZON_WATCHDOG_PUBLIC_KEY_JWK: ${{ vars.HORIZON_WATCHDOG_PUBLIC_KEY_JWK }}" in workflow
     assert "scripts/horizon_daily_gate.py preflight" in workflow

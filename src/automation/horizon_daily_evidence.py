@@ -190,6 +190,19 @@ def _validate_provenance(
         base_model["provenance_verification_status"] = "not_applicable"
         base_model["primary_schedule_on_time"] = on_time
         return base_model, None, None
+    if source == "scheduled-verification":
+        on_time = provenance.get("primary_schedule_on_time")
+        if (
+            event != "schedule"
+            or not isinstance(schedule_expression, str)
+            or not schedule_expression
+            or schedule_expression == PRIMARY_CRON
+            or on_time is not False
+        ):
+            raise EvidenceError("PROVENANCE_MISMATCH:scheduled_verification")
+        base_model["provenance_verification_status"] = "not_applicable"
+        base_model["primary_schedule_on_time"] = False
+        return base_model, None, None
     if source == "manual":
         actor = provenance.get("github_actor")
         if event != "workflow_dispatch" or schedule_expression is not None or not isinstance(actor, str) or not actor:
