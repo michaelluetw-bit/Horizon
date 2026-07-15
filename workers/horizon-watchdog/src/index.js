@@ -1,7 +1,12 @@
 export { FallbackDayGate } from "./fallback-day-gate.js";
 export { HandoffRegistry } from "./handoff-registry.js";
 
-import { MAX_INVOCATION_LAG_MS, validateScheduledInvocation, WATCHDOG_CRON } from "./contracts.js";
+import {
+  MAX_INVOCATION_LAG_MS,
+  validateScheduledInvocation,
+  validateVerificationInvocation,
+  WATCHDOG_CRON,
+} from "./contracts.js";
 import {
   decideFallbackRuns,
   decidePrimaryRuns,
@@ -37,6 +42,58 @@ async function claimFallbackDay(env, targetDate) {
   if (response.status === 201) return true;
   if (response.status === 409) return false;
   throw new Error("FALLBACK_DAY_GATE_UNAVAILABLE");
+}
+
+const PUBLIC_AUDIT_FIELDS = [
+  "configured_watchdog_schedule_expression",
+  "trigger_schedule_expression",
+  "scheduled_time",
+  "scheduled_time_utc",
+  "invocation_started_at",
+  "invocation_started_at_utc",
+  "invocation_delta_ms",
+  "max_invocation_lag_ms",
+  "target_date",
+  "execution_mode",
+  "decision",
+  "reason",
+  "primary_run_id",
+  "workflow_run_id",
+  "run_url",
+  "html_url",
+  "http_status",
+  "workflow_selector",
+  "api_version",
+  "worker_version_id",
+  "worker_version_tag",
+  "worker_version_timestamp",
+];
+
+function publicWatchdogAudit(result) {
+  return Object.fromEntries(
+    PUBLIC_AUDIT_FIELDS.filter(
+      (field) => result[field] !== undefined && result[field] !== null,
+    ).map((field) => [field, result[field]]),
+  );
+}
+
+async function persistWatchdogAudit(env, result) {
+  if (
+    !env.FALLBACK_DAY_GATE ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(result.target_date ?? "")
+  ) {
+    throw new Error("WATCHDOG_AUDIT_UNAVAILABLE");
+  }
+  const record = publicWatchdogAudit(result);
+  const stub = env.FALLBACK_DAY_GATE.get(
+    env.FALLBACK_DAY_GATE.idFromName(result.target_date),
+  );
+  const response = await stub.fetch(
+    registryRequest("/audit", { target_date: result.target_date, record }),
+  );
+  if (response.status !== 200 && response.status !== 201) {
+    throw new Error("WATCHDOG_AUDIT_WRITE_FAILED");
+  }
 }
 
 function jsonResponse(payload, status = 200) {
@@ -86,19 +143,35 @@ function toUtcIso(epochMilliseconds) {
   return new Date(epochMilliseconds).toISOString();
 }
 
-function watchdogAudit(controller, invocationStartedAt, timing) {
+function watchdogAudit(
+  controller,
+  invocationStartedAt,
+  timing,
+  env,
+  executionMode,
+) {
+  const version = env.CF_VERSION_METADATA;
   return {
     configured_watchdog_schedule_expression: WATCHDOG_CRON,
-    trigger_schedule_expression: typeof controller.cron === "string" ? controller.cron : null,
-    scheduled_time: Number.isInteger(controller.scheduledTime) ? controller.scheduledTime : null,
+    trigger_schedule_expression:
+      typeof controller.cron === "string" ? controller.cron : null,
+    scheduled_time: Number.isInteger(controller.scheduledTime)
+      ? controller.scheduledTime
+      : null,
     scheduled_time_utc: toUtcIso(controller.scheduledTime),
-    invocation_started_at: Number.isInteger(invocationStartedAt) ? invocationStartedAt : null,
+    invocation_started_at: Number.isInteger(invocationStartedAt)
+      ? invocationStartedAt
+      : null,
     invocation_started_at_utc: toUtcIso(invocationStartedAt),
     invocation_delta_ms: timing.invocationDeltaMs,
     max_invocation_lag_ms: MAX_INVOCATION_LAG_MS,
     target_date: timing.targetDate,
+    execution_mode: executionMode,
     workflow_selector: WORKFLOW_FILE,
     api_version: GITHUB_API_HEADERS["X-GitHub-Api-Version"],
+    worker_version_id: version?.id ?? null,
+    worker_version_tag: version?.tag ?? null,
+    worker_version_timestamp: version?.timestamp ?? null,
   };
 }
 
@@ -234,13 +307,37 @@ export async function handleHandoffRequest({
   return jsonResponse(receipt);
 }
 
-export async function evaluateScheduledInvocation({ controller, env, invocationStartedAt, fetchImpl }) {
-  const timing = validateScheduledInvocation({
-    controllerCron: controller.cron,
-    scheduledTime: controller.scheduledTime,
+export async function evaluateScheduledInvocation({
+  controller,
+  env,
+  invocationStartedAt,
+  fetchImpl,
+}) {
+  const verificationMode =
+    typeof env.HORIZON_WATCHDOG_VERIFICATION_CRON === "string" &&
+    env.HORIZON_WATCHDOG_VERIFICATION_CRON !== "" &&
+    controller.cron === env.HORIZON_WATCHDOG_VERIFICATION_CRON;
+  const executionMode = verificationMode ? "verification" : "production";
+  const timing = verificationMode
+    ? validateVerificationInvocation({
+        controllerCron: controller.cron,
+        scheduledTime: controller.scheduledTime,
+        invocationStartedAt,
+        verificationCron: env.HORIZON_WATCHDOG_VERIFICATION_CRON,
+        verificationTargetDate: env.HORIZON_WATCHDOG_VERIFICATION_TARGET_DATE,
+      })
+    : validateScheduledInvocation({
+        controllerCron: controller.cron,
+        scheduledTime: controller.scheduledTime,
+        invocationStartedAt,
+      });
+  const audit = watchdogAudit(
+    controller,
     invocationStartedAt,
-  });
-  const audit = watchdogAudit(controller, invocationStartedAt, timing);
+    timing,
+    env,
+    executionMode,
+  );
   if (!timing.accepted) {
     return withWatchdogAudit(audit, {
       targetDate: timing.targetDate,
@@ -288,6 +385,17 @@ export async function evaluateScheduledInvocation({ controller, env, invocationS
       invocationDeltaMs: timing.invocationDeltaMs,
       decision: primaryDecision.decision,
       reason: primaryDecision.reason,
+    });
+  }
+
+  if (verificationMode) {
+    return withWatchdogAudit(audit, {
+      targetDate: timing.targetDate,
+      scheduledTime: controller.scheduledTime,
+      invocationStartedAt,
+      invocationDeltaMs: timing.invocationDeltaMs,
+      decision: "CHECK_FAILED",
+      reason: "VERIFICATION_PRIMARY_MISSING",
     });
   }
 
@@ -437,17 +545,45 @@ export async function evaluateScheduledInvocation({ controller, env, invocationS
   });
 }
 
+export async function handleAuditRequest({ request, env }) {
+  const url = new URL(request.url);
+  const match = url.pathname.match(/^\/v1\/audits\/(\d{4}-\d{2}-\d{2})$/);
+  if (!match) return null;
+  if (request.method !== "GET")
+    return jsonResponse({ reason: "METHOD_NOT_ALLOWED" }, 405);
+  if (url.search || url.hash)
+    return jsonResponse({ reason: "INVALID_REQUEST" }, 400);
+  if (!env.FALLBACK_DAY_GATE)
+    return jsonResponse({ reason: "WATCHDOG_AUDIT_UNAVAILABLE" }, 503);
+  const targetDate = match[1];
+  const stub = env.FALLBACK_DAY_GATE.get(
+    env.FALLBACK_DAY_GATE.idFromName(targetDate),
+  );
+  return stub.fetch(`https://audit.internal/audit?target_date=${targetDate}`);
+}
+
 export default {
   async scheduled(controller, env, ctx) {
-    const work = evaluateScheduledInvocation({
-      controller,
-      env,
-      invocationStartedAt: Date.now(),
-      fetchImpl: fetch,
-    }).then((result) => console.log(JSON.stringify(result)));
+    const work = (async () => {
+      const result = await evaluateScheduledInvocation({
+        controller,
+        env,
+        invocationStartedAt: Date.now(),
+        fetchImpl: fetch,
+      });
+      console.log(JSON.stringify(result));
+      await persistWatchdogAudit(env, result);
+    })();
     ctx.waitUntil(work);
   },
   async fetch(request, env) {
-    return handleHandoffRequest({ request, env, nowMs: Date.now(), fetchImpl: fetch });
+    const auditResponse = await handleAuditRequest({ request, env });
+    if (auditResponse) return auditResponse;
+    return handleHandoffRequest({
+      request,
+      env,
+      nowMs: Date.now(),
+      fetchImpl: fetch,
+    });
   },
 };

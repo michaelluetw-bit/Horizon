@@ -10,13 +10,13 @@ import { verifyReceipt } from "../src/receipt.js";
 
 const SCHEDULED_TIME = Date.parse("2026-07-13T22:00:00.000Z");
 
-function scheduleRun() {
+function scheduleRun({ id = 12345, createdAt = "2026-07-13T21:17:00Z" } = {}) {
   return {
-    id: 12345,
+    id,
     event: "schedule",
     head_branch: "main",
     path: ".github/workflows/horizon_daily.yml",
-    created_at: "2026-07-13T21:17:00Z",
+    created_at: createdAt,
   };
 }
 
@@ -57,6 +57,69 @@ describe("evaluateScheduledInvocation", () => {
       invocation_delta_ms: 0,
       max_invocation_lag_ms: 300_000,
       api_version: "2026-03-10",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a date-scoped acceptance cron in primary-read-only mode", async () => {
+    const verificationTime = Date.parse("2026-07-16T01:30:00.000Z");
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          total_count: 1,
+          workflow_runs: [
+            scheduleRun({ id: 67890, createdAt: "2026-07-15T22:14:34Z" }),
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      evaluateScheduledInvocation({
+        controller: { cron: "30 1 16 7 *", scheduledTime: verificationTime },
+        env: {
+          HORIZON_WATCHDOG_VERIFICATION_CRON: "30 1 16 7 *",
+          HORIZON_WATCHDOG_VERIFICATION_TARGET_DATE: "2026-07-16",
+          CF_VERSION_METADATA: { id: "version-1" },
+        },
+        invocationStartedAt: verificationTime + 1_000,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({
+      decision: "PRIMARY_PRESENT",
+      execution_mode: "verification",
+      target_date: "2026-07-16",
+      primary_run_id: 67890,
+      trigger_schedule_expression: "30 1 16 7 *",
+      worker_version_id: "version-1",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("never dispatches from an acceptance cron when the primary run is absent", async () => {
+    const verificationTime = Date.parse("2026-07-16T01:30:00.000Z");
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), {
+        status: 200,
+      }),
+    );
+
+    await expect(
+      evaluateScheduledInvocation({
+        controller: { cron: "30 1 16 7 *", scheduledTime: verificationTime },
+        env: {
+          HORIZON_WATCHDOG_VERIFICATION_CRON: "30 1 16 7 *",
+          HORIZON_WATCHDOG_VERIFICATION_TARGET_DATE: "2026-07-16",
+        },
+        invocationStartedAt: verificationTime + 1_000,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({
+      decision: "CHECK_FAILED",
+      execution_mode: "verification",
+      reason: "VERIFICATION_PRIMARY_MISSING",
+      target_date: "2026-07-16",
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });

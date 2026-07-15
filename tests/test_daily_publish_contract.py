@@ -469,6 +469,17 @@ def test_ci_runs_the_watchdog_contract_suite_without_deployment() -> None:
     assert "wrangler deploy" not in workflow
 
 
+def test_watchdog_persists_full_invocation_logs_and_exposes_version_metadata() -> None:
+    config = json.loads((ROOT / "workers/horizon-watchdog/wrangler.jsonc").read_text(encoding="utf-8"))
+
+    assert config["observability"] == {
+        "enabled": True,
+        "head_sampling_rate": 1,
+        "logs": {"invocation_logs": True},
+    }
+    assert config["version_metadata"] == {"binding": "CF_VERSION_METADATA"}
+
+
 def test_workflows_use_node24_action_runtimes() -> None:
     ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     daily_workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
