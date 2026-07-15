@@ -313,10 +313,13 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     assert "peaceiris/actions-gh-pages" in deployment
 
 
-def test_daily_workflow_has_the_temporary_0805_taipei_schedule() -> None:
+def test_daily_workflow_has_only_the_production_primary_schedule() -> None:
     workflow = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
 
-    assert "cron: '5 0 * * *'" in workflow
+    assert workflow.count("cron:") == 1
+    assert "cron: '17 21 * * *'" in workflow
+    assert "cron: '5 0 * * *'" not in workflow
+    assert "cron: '37 1 15 7 *'" not in workflow
     assert "cron: '50 23 * * *'" not in workflow
 
 
