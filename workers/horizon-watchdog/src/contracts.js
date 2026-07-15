@@ -100,3 +100,106 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
     invocationDeltaMs,
   };
 }
+
+function dateScopedCronMatchesScheduledTime(cron, scheduledTime) {
+  const match = cron.match(/^(\d{1,2}) (\d{1,2}) (\d{1,2}) (\d{1,2}) \*$/);
+  if (!match) return false;
+  const [, minute, hour, day, month] = match.map(Number);
+  if (
+    minute > 59 ||
+    hour > 23 ||
+    day < 1 ||
+    day > 31 ||
+    month < 1 ||
+    month > 12
+  ) {
+    return false;
+  }
+  const scheduled = new Date(scheduledTime);
+  return (
+    scheduled.getUTCMinutes() === minute &&
+    scheduled.getUTCHours() === hour &&
+    scheduled.getUTCDate() === day &&
+    scheduled.getUTCMonth() + 1 === month &&
+    scheduled.getUTCSeconds() === 0 &&
+    scheduled.getUTCMilliseconds() === 0
+  );
+}
+
+export function validateVerificationInvocation({
+  controllerCron,
+  scheduledTime,
+  invocationStartedAt,
+  verificationCron,
+  verificationTargetDate,
+}) {
+  if (!Number.isInteger(scheduledTime)) {
+    return rejected({
+      decision: "CHECK_FAILED",
+      reason: "SCHEDULED_TIME_INVALID",
+      targetDate: null,
+      invocationDeltaMs: null,
+    });
+  }
+  const targetDate = targetDateForTaipei(scheduledTime);
+  const invocationDeltaMs = Number.isInteger(invocationStartedAt)
+    ? invocationStartedAt - scheduledTime
+    : null;
+
+  if (
+    typeof verificationCron !== "string" ||
+    !verificationCron ||
+    typeof verificationTargetDate !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(verificationTargetDate)
+  ) {
+    return rejected({
+      decision: "CHECK_FAILED",
+      reason: "VERIFICATION_CONFIGURATION_INVALID",
+      targetDate,
+      invocationDeltaMs,
+    });
+  }
+  if (
+    controllerCron !== verificationCron ||
+    !dateScopedCronMatchesScheduledTime(controllerCron, scheduledTime)
+  ) {
+    return rejected({
+      decision: "CHECK_FAILED",
+      reason: "VERIFICATION_CRON_MISMATCH",
+      targetDate,
+      invocationDeltaMs,
+    });
+  }
+  if (targetDate !== verificationTargetDate) {
+    return rejected({
+      decision: "CHECK_FAILED",
+      reason: "VERIFICATION_TARGET_DATE_MISMATCH",
+      targetDate,
+      invocationDeltaMs,
+    });
+  }
+  if (!Number.isInteger(invocationStartedAt)) {
+    return rejected({
+      decision: "STALE_SCHEDULED_INVOCATION",
+      reason: "INVOCATION_TIME_INVALID",
+      targetDate,
+      invocationDeltaMs: null,
+    });
+  }
+  if (invocationDeltaMs < 0 || invocationDeltaMs > MAX_INVOCATION_LAG_MS) {
+    return rejected({
+      decision: "STALE_SCHEDULED_INVOCATION",
+      reason: "INVOCATION_LAG_OUT_OF_RANGE",
+      targetDate,
+      invocationDeltaMs,
+    });
+  }
+
+  return {
+    accepted: true,
+    decision: "READY",
+    mayQueryGithub: true,
+    targetDate,
+    invocationDeltaMs,
+  };
+}

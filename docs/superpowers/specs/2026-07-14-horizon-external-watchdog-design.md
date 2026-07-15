@@ -163,6 +163,7 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 - <code>workflow_run_id</code>、<code>run_url</code>、<code>html_url</code>（若有）
 - HTTP status、API version <code>2026-03-10</code>
 - 最終 decision、原因碼，以及移除敏感資訊後的 response metadata
+- <code>execution_mode</code> 與實際執行的 Worker version ID
 
 決策只允許為：
 
@@ -175,7 +176,9 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 - <code>DISPATCH_FAILED</code>
 - <code>STALE_SCHEDULED_INVOCATION</code>
 
-Cloudflare 與 GitHub logs 是 provenance 證據，不是新的 canonical 資料庫，也不得輸出 token。
+Worker 必須啟用 Cloudflare Workers Logs、保存 invocation logs 並使用完整取樣。每次 scheduled invocation 也必須把上述非敏感欄位以 <code>scheduled_time</code> 為 immutable key 寫入按 <code>target_date</code> 分區的強一致 Durable Object；相同內容可冪等重送，不同內容衝突時 fail-closed。唯讀端點固定為 <code>GET /v1/audits/{target_date}</code>，只回傳 allowlist 後的 audit records，不得暴露 token、簽章私鑰或 GitHub response body。
+
+Cloudflare 與 GitHub logs 及上述 audit records 是 provenance 證據，不是新的 canonical 資料庫，也不得輸出 token。
 
 ## 6. Workflow provenance、run-name 與 execution manifest
 
@@ -415,7 +418,9 @@ JSON run artifact 就是 execution manifest。watchdog 的 Step Summary、PR bod
 
 ### 8.2 Production acceptance
 
-Production 只採自然觀測，不得為了製造 primary-missing 情境而暫時破壞 primary 排程、修改 cron 或建立長期測試 runtime。
+Production 只採自然觀測，不得為了製造 primary-missing 情境而暫時破壞 primary 排程、修改 primary cron 或建立長期測試 runtime。
+
+若當日 normal primary 已自然完成，但既有 Worker decision 因先前未啟用持久 logs 而不可稽核，可用一次性的 date-scoped acceptance cron 驗證第 5.4 節 audit channel。此 cron 與固定 <code>target_date</code> 必須經 PR 審查後部署；其 execution mode 固定為 <code>verification</code>，只能查詢 primary，不得查詢 fallback、建立 handoff 或 dispatch。primary 不存在時只能回傳 <code>CHECK_FAILED / VERIFICATION_PRIMARY_MISSING</code>。取得證據後必須在同日移除該 cron 與對應 vars。此證據只驗證 <code>PRIMARY_PRESENT</code> 與 audit runtime，不得冒充 primary-missing 或 fallback 成功證據。
 
 - 正常 daily primary：證明 primary run、四檔、PR／auto-merge 與 Watchdog 無干預。
 - 生產環境尚未自然發生 primary-missing 時，記錄 <code>PRODUCTION_PRIMARY_MISSING_OBSERVATION = NOT_OBSERVED</code>；在 deterministic tests 與正常 primary production acceptance 均通過後，它不阻擋 P0-B2R 關閉。
