@@ -13,6 +13,7 @@ function environment(overrides = {}) {
     GITHUB_REPOSITORY: "michaelluetw-bit/Horizon",
     HORIZON_GITHUB_WORKFLOW_REF: WORKFLOW_REF,
     GITHUB_EVENT_NAME: "schedule",
+    GITHUB_EVENT_SCHEDULE: "17 21 * * *",
     GITHUB_ACTOR: "horizon-maintainer",
     HORIZON_TRIGGER_SOURCE: "",
     HORIZON_HANDOFF_ID: "",
@@ -61,6 +62,46 @@ describe("GitHub workflow provenance routing", () => {
       trigger_source: "primary",
       target_date: "2026-07-14",
       primary_schedule_on_time: true,
+    });
+  });
+
+  it("records a verification schedule with its actual non-primary cron", async () => {
+    const provenance = await prepareProvenance({
+      env: environment({ GITHUB_EVENT_SCHEDULE: "5 0 * * *" }),
+      nowMs: Date.parse("2026-07-14T00:05:00Z"),
+    });
+
+    expect(provenance).toMatchObject({
+      trigger_source: "scheduled-verification",
+      trigger_event: "schedule",
+      trigger_schedule_expression: "5 0 * * *",
+      target_date: "2026-07-14",
+      primary_schedule_on_time: false,
+    });
+  });
+
+  it("rejects a scheduled run that does not expose its triggering cron", async () => {
+    await expect(
+      prepareProvenance({
+        env: environment({ GITHUB_EVENT_SCHEDULE: "" }),
+        nowMs: Date.parse("2026-07-13T21:17:00Z"),
+      }),
+    ).rejects.toThrow("PROVENANCE_REJECTED:MISSING_EVENT_SCHEDULE");
+  });
+
+  it("leaves manual dispatch provenance independent of schedule context", async () => {
+    const provenance = await prepareProvenance({
+      env: environment({
+        GITHUB_EVENT_NAME: "workflow_dispatch",
+        GITHUB_EVENT_SCHEDULE: "",
+      }),
+      nowMs: Date.parse("2026-07-13T22:00:00Z"),
+    });
+
+    expect(provenance).toMatchObject({
+      trigger_source: "manual",
+      trigger_event: "workflow_dispatch",
+      trigger_schedule_expression: null,
     });
   });
 

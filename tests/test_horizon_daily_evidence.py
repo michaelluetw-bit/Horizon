@@ -69,6 +69,24 @@ def watchdog_provenance() -> dict[str, object]:
     }
 
 
+def scheduled_verification_provenance() -> dict[str, object]:
+    return {
+        "trigger_source": "scheduled-verification",
+        "trigger_event": "schedule",
+        "trigger_schedule_expression": "5 0 * * *",
+        "target_date": TARGET_DATE,
+        "primary_schedule_on_time": False,
+        "github": {
+            "github_run_id": 123456,
+            "github_run_attempt": 1,
+            "repository": "michaelluetw-bit/Horizon",
+            "workflow_ref": "michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main",
+            "commit_sha": "a" * 40,
+            "event_name": "schedule",
+        },
+    }
+
+
 def workflow_context() -> dict[str, object]:
     return {
         "run_id": 123456,
@@ -119,6 +137,22 @@ def test_watchdog_evidence_rejects_receipt_context_mismatch_before_pr_creation(t
             provenance=provenance,
             workflow=workflow_context(),
         )
+
+
+def test_scheduled_verification_evidence_records_the_actual_nonprimary_cron(tmp_path: Path) -> None:
+    write_complete_set(tmp_path)
+
+    evidence = build_evidence(
+        root=tmp_path,
+        target_date=TARGET_DATE,
+        provenance=scheduled_verification_provenance(),
+        workflow=workflow_context(),
+    )
+
+    assert evidence.manifest["trigger_source"] == "scheduled-verification"
+    assert evidence.manifest["trigger_schedule_expression"] == "5 0 * * *"
+    assert evidence.provenance_model["primary_schedule_on_time"] is False
+    verify_pr_body(evidence.pr_body, evidence.provenance_model)
 
 
 def test_evidence_cli_writes_only_noncanonical_run_files(tmp_path: Path) -> None:
