@@ -39,7 +39,7 @@ dp_4_result: batch-inline - plan revision 4; user-confirmed mode retained; LF-no
 dp_4_timestamp: 2026-07-16T04:34:22.755Z
 dp_5_result: not-applicable - no three-fix debugging threshold or architectural escalation
 dp_5_timestamp: 2026-07-16T03:40:48Z
-dp_6_result: pass - Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants
-dp_6_timestamp: 2026-07-16T03:40:48Z
+dp_6_result: pass - Python 331 tests, Watchdog 57 tests, revision 4 portability invariants, runtime secret-only rotation invariants, no manual dispatch, and Vault acceptance invariants
+dp_6_timestamp: 2026-07-16T04:40:49.445Z
 dp_7_result: confirmed - archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started
 dp_7_timestamp: 2026-07-16T04:01:47.693Z

@@ -1,7 +1,7 @@
 # Decision-Point Audit Report
 
 **变更**: horizon-watchdog-least-privilege-token
-**生成时间**: 2026-07-16T04:35:17.216Z
+**生成时间**: 2026-07-16T04:41:33.958Z
 **当前状态**: closing
 
 ## 汇总表
@@ -14,7 +14,7 @@
 | DP-3 | 契约批准 | approved - minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 ACCEPTED and do not start P0-B3 | 2026-07-16T03:40:48Z |
 | DP-4 | 执行模式选择 | batch-inline - plan revision 4; user-confirmed mode retained; LF-normalized raw-byte hash inputs and reviewer-requested YAML and receipt portability fixes added without changing runtime, credential scope, or acceptance conclusions | 2026-07-16T04:34:22.755Z |
 | DP-5 | 调试升级 | not-applicable - no three-fix debugging threshold or architectural escalation | 2026-07-16T03:40:48Z |
-| DP-6 | 验证失败 | pass - Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants | 2026-07-16T03:40:48Z |
+| DP-6 | 验证失败 | pass - Python 331 tests, Watchdog 57 tests, revision 4 portability invariants, runtime secret-only rotation invariants, no manual dispatch, and Vault acceptance invariants | 2026-07-16T04:40:49.445Z |
 | DP-7 | 归档确认 | confirmed - archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started | 2026-07-16T04:01:47.693Z |
 
 **统计**: 8/8 已记录，0/8 未记录。
@@ -59,9 +59,9 @@
 
 ### DP-6: 验证失败
 
-- **结果**: pass - Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants
-- **时间戳**: 2026-07-16T03:40:48Z
-- **解读**: 决策点 DP-6 已记录为 "pass - Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants"。
+- **结果**: pass - Python 331 tests, Watchdog 57 tests, revision 4 portability invariants, runtime secret-only rotation invariants, no manual dispatch, and Vault acceptance invariants
+- **时间戳**: 2026-07-16T04:40:49.445Z
+- **解读**: 决策点 DP-6 已记录为 "pass - Python 331 tests, Watchdog 57 tests, revision 4 portability invariants, runtime secret-only rotation invariants, no manual dispatch, and Vault acceptance invariants"。
 
 ### DP-7: 归档确认
 
