@@ -62,7 +62,8 @@ describe("evaluateScheduledInvocation", () => {
   });
 
   it("runs a date-scoped acceptance cron in primary-read-only mode", async () => {
-    const verificationTime = Date.parse("2026-07-16T01:30:00.000Z");
+    const verificationCronTime = Date.parse("2026-07-16T01:30:00.000Z");
+    const scheduledTime = verificationCronTime + 45_000;
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -77,13 +78,13 @@ describe("evaluateScheduledInvocation", () => {
 
     await expect(
       evaluateScheduledInvocation({
-        controller: { cron: "30 1 16 7 *", scheduledTime: verificationTime },
+        controller: { cron: "30 1 16 7 *", scheduledTime },
         env: {
           HORIZON_WATCHDOG_VERIFICATION_CRON: "30 1 16 7 *",
           HORIZON_WATCHDOG_VERIFICATION_TARGET_DATE: "2026-07-16",
           CF_VERSION_METADATA: { id: "version-1" },
         },
-        invocationStartedAt: verificationTime + 1_000,
+        invocationStartedAt: scheduledTime + 1_010,
         fetchImpl,
       }),
     ).resolves.toMatchObject({
