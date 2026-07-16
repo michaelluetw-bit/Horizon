@@ -34,8 +34,8 @@ Previous schedule contract is superseded.
 
 | 路徑 | 權威排程 | UTC cron | 台北預定時間 | 有效窗口 |
 | --- | --- | --- | --- | --- |
-| Primary | GitHub Actions <code>schedule</code> | <code>17 21 * * *</code> | 05:17 | workflow 進入 preflight：05:12:00–05:22:00 |
-| Watchdog | Cloudflare Worker Cron | <code>0 22 * * *</code> | 06:00 | invocation 觀測窗口：05:55:00–06:05:00 |
+| Primary | GitHub Actions <code>schedule</code> | <code>17 20 * * *</code> | 04:17 | workflow 進入 preflight：04:12:00–04:22:00 |
+| Watchdog | Cloudflare Worker Cron | <code>0 23 * * *</code> | 07:00 | invocation 觀測窗口：06:55:00–07:05:00 |
 
 Primary 的 on-time 驗收必須落在其窗口內。窗口外才出現的 <code>event=schedule</code> 仍是已投遞的 schedule run，Watchdog 不得因它晚到而再 dispatch；但它不可被記為準時 primary 成功證據。
 
@@ -103,7 +103,7 @@ invocation_started_at       = handler 實際進入時間
 invocation_delta_ms         = invocation_started_at - scheduled_time
 ~~~
 
-- <code>trigger_schedule_expression</code> 必須精確等於設定的 <code>configured_watchdog_schedule_expression = "0 22 * * *"</code>。
+- <code>trigger_schedule_expression</code> 必須精確等於設定的 <code>configured_watchdog_schedule_expression = "0 23 * * *"</code>。
 - <code>scheduled_time</code> 是 <code>controller.scheduledTime</code> 所提供的 UTC epoch milliseconds；可另記錄 ISO-8601 便於閱讀，但不得覆蓋原始值。
 - <code>invocation_started_at</code> 只代表 handler 實際進入時間，不是排定時間。
 - <code>target_date</code> 只能由 <code>new Date(controller.scheduledTime)</code> 轉成 <code>Asia/Taipei</code> 日期。
@@ -208,7 +208,7 @@ Assertion 的固定識別值如下：
 | <code>audience</code> | <code>urn:horizon:p0-b2r:redemption:v1</code> |
 | <code>repository</code> | <code>michaelluetw-bit/Horizon</code> |
 | <code>workflow_identifier</code> | <code>michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main</code> |
-| <code>controller_cron</code> | <code>0 22 * * *</code> |
+| <code>controller_cron</code> | <code>0 23 * * *</code> |
 | <code>controller_scheduled_time</code> | UTC epoch milliseconds，整數 |
 | <code>jti</code>／<code>one_time_nonce</code> | 同一值；32 個 CSPRNG bytes 的 base64url 編碼 |
 | <code>issued_at</code>／<code>expires_at</code> | UTC Unix seconds；<code>expires_at = issued_at + 900</code>，不得延展 |
@@ -305,7 +305,7 @@ Manifest 的 <code>trigger_source</code> 是驗證後的規範化值；不由 <c
 
 | manifest <code>trigger_source</code> | <code>trigger_event</code> | <code>trigger_schedule_expression</code> | actor 記錄 | 允許條件 |
 | --- | --- | --- | --- | --- |
-| <code>primary</code> | <code>schedule</code> | <code>17 21 * * *</code> | <code>null</code> | <code>github.event_name=schedule</code> |
+| <code>primary</code> | <code>schedule</code> | <code>17 20 * * *</code> | <code>null</code> | <code>github.event_name=schedule</code> |
 | <code>watchdog</code> | <code>workflow_dispatch</code> | receipt 的 <code>controller_cron</code> | receipt 綁定的 Cloudflare handoff | 有效 assertion、OIDC、原子 redemption 與 receipt 全數通過 |
 | <code>manual</code> | <code>workflow_dispatch</code> | <code>null</code> | <code>github.actor</code>，不可為空 | 沒有 <code>handoff_id</code>，且未宣稱 <code>fallback-watchdog</code> |
 
