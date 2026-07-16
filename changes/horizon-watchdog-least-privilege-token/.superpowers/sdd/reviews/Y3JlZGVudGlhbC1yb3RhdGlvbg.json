@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "base": "6e0e326a2690c5ff9d8fb5ec942f0ae88a864831",
+  "head": "e7f3ac92b9a38bb2b4117536aa1f24f29ad94eae",
+  "report": ".superpowers\\sdd\\reviews\\credential-rotation.md",
+  "plan_hash": "sha256:9167ea54373977499b44ac4925362a2f0b22845d5e1d3430a6889cb96ad622a1",
+  "plan_revision": 1,
+  "recorded_at": "2026-07-16T03:31:09.846Z"
+}
