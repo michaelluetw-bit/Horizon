@@ -7,8 +7,8 @@ import {
   verifyAssertion,
 } from "../src/provenance.js";
 
-const SCHEDULED_TIME = Date.parse("2026-07-13T22:00:00.000Z");
-const ISSUED_AT = Date.parse("2026-07-13T22:01:00.000Z");
+const SCHEDULED_TIME = Date.parse("2026-07-13T23:00:00.000Z");
+const ISSUED_AT = Date.parse("2026-07-13T23:01:00.000Z");
 
 async function signingKeys() {
   const keyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
@@ -53,7 +53,7 @@ describe("Cloudflare provenance assertion", () => {
 
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: ISSUED_AT,
       jti: "A".repeat(43),
@@ -66,7 +66,7 @@ describe("Cloudflare provenance assertion", () => {
       repository: "michaelluetw-bit/Horizon",
       workflow_identifier:
         "michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main",
-      controller_cron: "0 22 * * *",
+      controller_cron: "0 23 * * *",
       controller_scheduled_time: SCHEDULED_TIME,
       target_date: "2026-07-14",
       jti: "A".repeat(43),
@@ -92,7 +92,7 @@ describe("Cloudflare provenance assertion", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: ISSUED_AT,
       jti: "B".repeat(43),
@@ -111,7 +111,7 @@ describe("Cloudflare provenance assertion", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: ISSUED_AT,
       jti: "C".repeat(43),
@@ -139,7 +139,7 @@ describe("Cloudflare provenance assertion", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: ISSUED_AT,
       jti: "D".repeat(43),

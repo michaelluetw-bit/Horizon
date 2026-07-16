@@ -1,7 +1,7 @@
 import { redeemWorkflowProvenance } from "./github-redemption.js";
 
 const TAIPEI = "Asia/Taipei";
-const PRIMARY_CRON = "17 21 * * *";
+const PRIMARY_CRON = "17 20 * * *";
 const OIDC_AUDIENCE = "urn:horizon:p0-b2r:redemption:v1";
 
 export function taipeiToday(nowMs = Date.now()) {
@@ -18,8 +18,8 @@ export function taipeiToday(nowMs = Date.now()) {
 }
 
 function isPrimaryScheduleOnTime(nowMs, targetDate) {
-  const startsAt = Date.parse(`${targetDate}T05:12:00+08:00`);
-  const endsAt = Date.parse(`${targetDate}T05:22:00+08:00`);
+  const startsAt = Date.parse(`${targetDate}T04:12:00+08:00`);
+  const endsAt = Date.parse(`${targetDate}T04:22:00+08:00`);
   return nowMs >= startsAt && nowMs <= endsAt;
 }
 

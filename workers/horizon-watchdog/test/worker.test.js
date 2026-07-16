@@ -8,9 +8,9 @@ import {
 import { createAssertion } from "../src/provenance.js";
 import { verifyReceipt } from "../src/receipt.js";
 
-const SCHEDULED_TIME = Date.parse("2026-07-13T22:00:00.000Z");
+const SCHEDULED_TIME = Date.parse("2026-07-13T23:00:00.000Z");
 
-function scheduleRun({ id = 12345, createdAt = "2026-07-13T21:17:00Z" } = {}) {
+function scheduleRun({ id = 12345, createdAt = "2026-07-13T20:17:00Z" } = {}) {
   return {
     id,
     event: "schedule",
@@ -41,7 +41,7 @@ describe("evaluateScheduledInvocation", () => {
 
     await expect(
       evaluateScheduledInvocation({
-        controller: { cron: "0 22 * * *", scheduledTime: SCHEDULED_TIME },
+        controller: { cron: "0 23 * * *", scheduledTime: SCHEDULED_TIME },
         env: {},
         invocationStartedAt: SCHEDULED_TIME,
         fetchImpl,
@@ -50,8 +50,8 @@ describe("evaluateScheduledInvocation", () => {
       decision: "PRIMARY_PRESENT",
       targetDate: "2026-07-14",
       primaryRunId: 12345,
-      configured_watchdog_schedule_expression: "0 22 * * *",
-      trigger_schedule_expression: "0 22 * * *",
+      configured_watchdog_schedule_expression: "0 23 * * *",
+      trigger_schedule_expression: "0 23 * * *",
       scheduled_time: SCHEDULED_TIME,
       invocation_started_at: SCHEDULED_TIME,
       invocation_delta_ms: 0,
@@ -158,7 +158,7 @@ describe("evaluateScheduledInvocation", () => {
 
     await expect(
       evaluateScheduledInvocation({
-        controller: { cron: "0 22 * * *", scheduledTime: SCHEDULED_TIME },
+        controller: { cron: "0 23 * * *", scheduledTime: SCHEDULED_TIME },
         env: {
           HANDOFF_REGISTRY: registry,
           FALLBACK_DAY_GATE: dayGate.binding,
@@ -199,7 +199,7 @@ describe("evaluateScheduledInvocation", () => {
 
     await expect(
       evaluateScheduledInvocation({
-        controller: { cron: "0 22 * * *", scheduledTime: SCHEDULED_TIME },
+        controller: { cron: "0 23 * * *", scheduledTime: SCHEDULED_TIME },
         env: {
           HANDOFF_REGISTRY: registry,
           FALLBACK_DAY_GATE: dayGate.binding,
@@ -233,7 +233,7 @@ describe("evaluateScheduledInvocation", () => {
 
     await expect(
       evaluateScheduledInvocation({
-        controller: { cron: "0 22 * * *", scheduledTime: SCHEDULED_TIME },
+        controller: { cron: "0 23 * * *", scheduledTime: SCHEDULED_TIME },
         env: { FALLBACK_DAY_GATE: dayGate },
         invocationStartedAt: SCHEDULED_TIME,
         fetchImpl,
@@ -277,7 +277,7 @@ describe("handleHandoffRequest", () => {
     const publicKeyJwk = await crypto.subtle.exportKey("jwk", signingKeyPair.publicKey);
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: SCHEDULED_TIME,
       jti: "E".repeat(43),
@@ -326,7 +326,7 @@ describe("handleHandoffRequest", () => {
     const jti = "F".repeat(43);
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: SCHEDULED_TIME,
       jti,

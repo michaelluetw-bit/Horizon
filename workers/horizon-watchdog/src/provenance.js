@@ -60,7 +60,7 @@ async function sha256Hex(text) {
 }
 
 function watchdogScheduledTime(targetDate) {
-  return Date.parse(`${targetDate}T06:00:00+08:00`);
+  return Date.parse(`${targetDate}T07:00:00+08:00`);
 }
 
 function scheduleClaimsAreValid(payload) {
