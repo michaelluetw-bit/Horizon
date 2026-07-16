@@ -1,7 +1,7 @@
 # Decision-Point Audit Report
 
 **变更**: horizon-watchdog-least-privilege-token
-**生成时间**: 2026-07-16T03:59:46.401Z
+**生成时间**: 2026-07-16T04:02:23.631Z
 **当前状态**: executing
 
 ## 汇总表
@@ -12,10 +12,10 @@
 | DP-1 | 需求确认 | skipped: hotfix fast-path; bounded credential-only remediation | 2026-07-16T03:40:48Z |
 | DP-2 | 工件审查 | skipped: hotfix fast-path; no standalone delta-spec phase | 2026-07-16T03:40:48Z |
 | DP-3 | 契约批准 | approved: minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 ACCEPTED and do not start P0-B3 | 2026-07-16T03:40:48Z |
-| DP-4 | 执行模式选择 | batch-inline: plan revision 2; user-confirmed mode retained; mechanical archive repair added the two already-completed tasks required by the closing guard without changing scope | 2026-07-16T03:58:39.285Z |
+| DP-4 | 执行模式选择 | batch-inline: plan revision 3; user-confirmed mode retained; archive artifacts now include the two completed tasks and the corrected P0-B2 ACCEPTED contract without changing scope | 2026-07-16T04:01:47.693Z |
 | DP-5 | 调试升级 | not-applicable: no three-fix debugging threshold or architectural escalation | 2026-07-16T03:40:48Z |
 | DP-6 | 验证失败 | pass: Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants | 2026-07-16T03:40:48Z |
-| DP-7 | 归档确认 | confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started | 2026-07-16T03:58:39.285Z |
+| DP-7 | 归档确认 | confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started | 2026-07-16T04:01:47.693Z |
 
 **统计**: 8/8 已记录，0/8 未记录。
 
@@ -47,9 +47,9 @@
 
 ### DP-4: 执行模式选择
 
-- **结果**: batch-inline: plan revision 2; user-confirmed mode retained; mechanical archive repair added the two already-completed tasks required by the closing guard without changing scope
-- **时间戳**: 2026-07-16T03:58:39.285Z
-- **解读**: 决策点 DP-4 已记录为 "batch-inline: plan revision 2; user-confirmed mode retained; mechanical archive repair added the two already-completed tasks required by the closing guard without changing scope"。
+- **结果**: batch-inline: plan revision 3; user-confirmed mode retained; archive artifacts now include the two completed tasks and the corrected P0-B2 ACCEPTED contract without changing scope
+- **时间戳**: 2026-07-16T04:01:47.693Z
+- **解读**: 决策点 DP-4 已记录为 "batch-inline: plan revision 3; user-confirmed mode retained; archive artifacts now include the two completed tasks and the corrected P0-B2 ACCEPTED contract without changing scope"。
 
 ### DP-5: 调试升级
 
@@ -66,7 +66,7 @@
 ### DP-7: 归档确认
 
 - **结果**: confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started
-- **时间戳**: 2026-07-16T03:58:39.285Z
+- **时间戳**: 2026-07-16T04:01:47.693Z
 - **解读**: 决策点 DP-7 已记录为 "confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started"。
 
 ---

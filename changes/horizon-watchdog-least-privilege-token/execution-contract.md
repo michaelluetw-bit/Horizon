@@ -2,7 +2,7 @@
 
 ## Intent Lock
 
-將 Cloudflare Worker encrypted secret `HORIZON_GITHUB_TOKEN` 從廣權限 OAuth token 輪替為只限 `michaelluetw-bit/Horizon`、repository permission 僅 `Actions: write`、具到期日的 dedicated fine-grained personal access token；只有在權限與部署證據均成立後，才移除 Vault 的 `SPEC_COMPLIANCE_EXCEPTION`，且 P0-B2 歷史仍維持 `FAILED`、P0-B3 不啟動。
+將 Cloudflare Worker encrypted secret `HORIZON_GITHUB_TOKEN` 從廣權限 OAuth token 輪替為只限 `michaelluetw-bit/Horizon`、repository permission 僅 `Actions: write`、具到期日的 dedicated fine-grained personal access token；只有在權限與部署證據均成立後，才移除 Vault 的 `SPEC_COMPLIANCE_EXCEPTION`，且 P0-B2 歷史仍維持 `ACCEPTED`、P0-B3 不啟動。
 
 ## Task List
 
