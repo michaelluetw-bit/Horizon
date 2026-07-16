@@ -116,14 +116,17 @@ function dateScopedCronMatchesScheduledTime(cron, scheduledTime) {
     return false;
   }
   const scheduled = new Date(scheduledTime);
-  return (
-    scheduled.getUTCMinutes() === minute &&
-    scheduled.getUTCHours() === hour &&
-    scheduled.getUTCDate() === day &&
-    scheduled.getUTCMonth() + 1 === month &&
-    scheduled.getUTCSeconds() === 0 &&
-    scheduled.getUTCMilliseconds() === 0
-  );
+  const expected = Date.UTC(scheduled.getUTCFullYear(), month - 1, day, hour, minute);
+  const expectedDate = new Date(expected);
+  if (
+    expectedDate.getUTCMonth() + 1 !== month ||
+    expectedDate.getUTCDate() !== day ||
+    expectedDate.getUTCHours() !== hour ||
+    expectedDate.getUTCMinutes() !== minute
+  ) {
+    return false;
+  }
+  return Math.abs(scheduledTime - expected) <= MAX_INVOCATION_LAG_MS;
 }
 
 export function validateVerificationInvocation({
