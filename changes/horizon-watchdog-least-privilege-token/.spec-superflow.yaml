@@ -4,16 +4,16 @@
 # === Core state ===
 state: closing
 workflow: hotfix
-revision: 3
+revision: 4
 
 # === Hashes (fast staleness detection) ===
-artifacts_hash: sha256:54e4c3be61cb50fe5646e0a2452742f5a5f04a72cc9874fcf3343712187dbb83
-contract_hash: sha256:eb95403d517362e8e1b82ee9c225be2764efbf21c1564759a57db0d3fedb10f0
+artifacts_hash: sha256:f5f226c84d4222796deac3c590d7afdaeb2732808fddb04a728650cc450d07c0
+contract_hash: sha256:3248ff6e0c07bcbe3c4f198a5d45785dc6b385b40684a62789ec27e9d062b8a6
 
 # === Execution progress ===
 execution_mode: batch-inline
-execution_plan_hash: sha256:491e8c9f7a5cc44f05b2420bbe05439c6edec0d156aba036bfa33e6a03c64c52
-execution_plan_revision: 3
+execution_plan_hash: sha256:1ca103be31b9344fb8a854e6047b7de341dcf2e11008c1707ba8dbdc0db2b454
+execution_plan_revision: 4
 batches_completed: 1
 test_result: pass
 spec_merged: false
@@ -29,17 +29,17 @@ dp_0_decisions: change=horizon-watchdog-least-privilege-token; intent=replace br
 dp_0_result: confirmed
 dp_0_confirmed: true
 dp_0_timestamp: 2026-07-16T03:07:32Z
-dp_1_result: skipped: hotfix fast-path; bounded credential-only remediation
+dp_1_result: skipped - hotfix fast-path; bounded credential-only remediation
 dp_1_timestamp: 2026-07-16T03:40:48Z
-dp_2_result: skipped: hotfix fast-path; no standalone delta-spec phase
+dp_2_result: skipped - hotfix fast-path; no standalone delta-spec phase
 dp_2_timestamp: 2026-07-16T03:40:48Z
-dp_3_result: approved: minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 ACCEPTED and do not start P0-B3
+dp_3_result: approved - minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 ACCEPTED and do not start P0-B3
 dp_3_timestamp: 2026-07-16T03:40:48Z
-dp_4_result: batch-inline: plan revision 3; user-confirmed mode retained; archive artifacts now include the two completed tasks and the corrected P0-B2 ACCEPTED contract without changing scope
-dp_4_timestamp: 2026-07-16T04:01:47.693Z
-dp_5_result: not-applicable: no three-fix debugging threshold or architectural escalation
+dp_4_result: batch-inline - plan revision 4; user-confirmed mode retained; LF-normalized raw-byte hash inputs and reviewer-requested YAML and receipt portability fixes added without changing runtime, credential scope, or acceptance conclusions
+dp_4_timestamp: 2026-07-16T04:34:22.755Z
+dp_5_result: not-applicable - no three-fix debugging threshold or architectural escalation
 dp_5_timestamp: 2026-07-16T03:40:48Z
-dp_6_result: pass: Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants
+dp_6_result: pass - Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants
 dp_6_timestamp: 2026-07-16T03:40:48Z
-dp_7_result: confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started
+dp_7_result: confirmed - archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started
 dp_7_timestamp: 2026-07-16T04:01:47.693Z

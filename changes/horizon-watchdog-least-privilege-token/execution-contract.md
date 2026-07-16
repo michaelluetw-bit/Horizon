@@ -15,3 +15,7 @@
 - GitHub token 是密碼等級資料；建立與輸入必須由使用者在本機互動介面完成，Codex 不讀取、不回顯、不保存 token 值。
 - 無法以安全方式完成 token 輸入時立即停止；不得以現有 broad OAuth token、token prefix、推測或 fallback 充當合規證據。
 - DP-3 必須由使用者明確批准；批准前不得修改 production secret。
+
+## Archive Portability
+
+- `tasks.md` 與 `execution-contract.md` 是 raw-byte hash inputs；兩者在所有平台都必須以 LF checkout，再進行 execution-plan sealing 與驗證。
