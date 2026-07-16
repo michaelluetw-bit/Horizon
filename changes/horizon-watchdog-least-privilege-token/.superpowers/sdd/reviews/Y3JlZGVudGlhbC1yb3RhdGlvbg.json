@@ -1,9 +1,9 @@
 {
   "status": "pass",
-  "base": "6e0e326a2690c5ff9d8fb5ec942f0ae88a864831",
-  "head": "49dc8b91dce483e3609bf49fc5e96bb6dac5d3ae",
-  "report": ".superpowers\\sdd\\reviews\\credential-rotation.md",
-  "plan_hash": "sha256:491e8c9f7a5cc44f05b2420bbe05439c6edec0d156aba036bfa33e6a03c64c52",
-  "plan_revision": 3,
-  "recorded_at": "2026-07-16T04:04:27.529Z"
+  "base": "0905c370e711152234a984620a99fc2ecc8746da",
+  "head": "6a76beadebf23a6a6c8685128d7ee67dced115ba",
+  "report": ".superpowers/sdd/reviews/credential-rotation-portability.md",
+  "plan_hash": "sha256:1ca103be31b9344fb8a854e6047b7de341dcf2e11008c1707ba8dbdc0db2b454",
+  "plan_revision": 4,
+  "recorded_at": "2026-07-16T04:48:09.797Z"
 }
