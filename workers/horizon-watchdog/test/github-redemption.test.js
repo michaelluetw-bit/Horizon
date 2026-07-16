@@ -4,7 +4,7 @@ import { redeemWorkflowProvenance } from "../src/github-redemption.js";
 import { createAssertion } from "../src/provenance.js";
 import { createReceipt } from "../src/receipt.js";
 
-const SCHEDULED_TIME = Date.parse("2026-07-13T22:00:00.000Z");
+const SCHEDULED_TIME = Date.parse("2026-07-13T23:00:00.000Z");
 const JTI = "G".repeat(43);
 const GITHUB_CONTEXT = {
   github_run_id: 12345,
@@ -45,7 +45,7 @@ describe("redeemWorkflowProvenance", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 22 * * *",
+      controllerCron: "0 23 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: SCHEDULED_TIME,
       jti: JTI,

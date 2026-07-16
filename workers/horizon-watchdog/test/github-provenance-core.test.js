@@ -13,7 +13,7 @@ function environment(overrides = {}) {
     GITHUB_REPOSITORY: "michaelluetw-bit/Horizon",
     HORIZON_GITHUB_WORKFLOW_REF: WORKFLOW_REF,
     GITHUB_EVENT_NAME: "schedule",
-    GITHUB_EVENT_SCHEDULE: "17 21 * * *",
+    GITHUB_EVENT_SCHEDULE: "17 20 * * *",
     GITHUB_ACTOR: "horizon-maintainer",
     HORIZON_TRIGGER_SOURCE: "",
     HORIZON_HANDOFF_ID: "",
@@ -26,13 +26,13 @@ describe("GitHub workflow provenance routing", () => {
   it("uses the actual schedule event for primary provenance", async () => {
     const provenance = await prepareProvenance({
       env: environment(),
-      nowMs: Date.parse("2026-07-13T21:17:00Z"),
+      nowMs: Date.parse("2026-07-13T20:17:00Z"),
     });
 
     expect(provenance).toMatchObject({
       trigger_source: "primary",
       trigger_event: "schedule",
-      trigger_schedule_expression: "17 21 * * *",
+      trigger_schedule_expression: "17 20 * * *",
       target_date: "2026-07-14",
       primary_schedule_on_time: true,
     });
@@ -54,8 +54,8 @@ describe("GitHub workflow provenance routing", () => {
   it("uses the captured workflow entry time for primary on-time evidence", async () => {
     const provenance = await prepareProvenance({
       env: environment(),
-      nowMs: Date.parse("2026-07-13T21:22:01Z"),
-      primaryStartedAtMs: Date.parse("2026-07-13T21:21:59Z"),
+      nowMs: Date.parse("2026-07-13T20:22:01Z"),
+      primaryStartedAtMs: Date.parse("2026-07-13T20:21:59Z"),
     });
 
     expect(provenance).toMatchObject({
@@ -84,7 +84,7 @@ describe("GitHub workflow provenance routing", () => {
     await expect(
       prepareProvenance({
         env: environment({ GITHUB_EVENT_SCHEDULE: "" }),
-        nowMs: Date.parse("2026-07-13T21:17:00Z"),
+        nowMs: Date.parse("2026-07-13T20:17:00Z"),
       }),
     ).rejects.toThrow("PROVENANCE_REJECTED:MISSING_EVENT_SCHEDULE");
   });
@@ -136,8 +136,8 @@ describe("GitHub workflow provenance routing", () => {
       receiptSignature: "signed-receipt",
       receiptPayload: {
         jti: handoffId,
-        controller_cron: "0 22 * * *",
-        controller_scheduled_time: 1783970400000,
+        controller_cron: "0 23 * * *",
+        controller_scheduled_time: 1783983600000,
         target_date: "2026-07-14",
         github_run_id: 123456,
         github_run_attempt: 1,

@@ -4,11 +4,11 @@ import { validateScheduledInvocation } from "../src/contracts.js";
 
 describe("validateScheduledInvocation", () => {
   it("uses Cloudflare scheduledTime to derive the Taipei target date", () => {
-    const scheduledTime = Date.parse("2026-07-13T22:00:00.000Z");
+    const scheduledTime = Date.parse("2026-07-13T23:00:00.000Z");
 
     expect(
       validateScheduledInvocation({
-        controllerCron: "0 22 * * *",
+        controllerCron: "0 23 * * *",
         scheduledTime,
         invocationStartedAt: scheduledTime + 300_000,
       }),
@@ -22,11 +22,11 @@ describe("validateScheduledInvocation", () => {
   });
 
   it("fails closed before any GitHub read when Cloudflare reports another cron", () => {
-    const scheduledTime = Date.parse("2026-07-13T22:00:00.000Z");
+    const scheduledTime = Date.parse("2026-07-13T23:00:00.000Z");
 
     expect(
       validateScheduledInvocation({
-        controllerCron: "17 21 * * *",
+        controllerCron: "17 20 * * *",
         scheduledTime,
         invocationStartedAt: scheduledTime,
       }),
@@ -42,9 +42,9 @@ describe("validateScheduledInvocation", () => {
   it("fails closed when the platform timestamp is not an integer epoch milliseconds value", () => {
     expect(
       validateScheduledInvocation({
-        controllerCron: "0 22 * * *",
+        controllerCron: "0 23 * * *",
         scheduledTime: Number.NaN,
-        invocationStartedAt: Date.parse("2026-07-13T22:00:00.000Z"),
+        invocationStartedAt: Date.parse("2026-07-13T23:00:00.000Z"),
       }),
     ).toMatchObject({
       accepted: false,
@@ -57,29 +57,29 @@ describe("validateScheduledInvocation", () => {
   it.each([
     [
       "scheduledTime is later than the approved five-minute window",
-      Date.parse("2026-07-13T22:05:00.001Z"),
-      Date.parse("2026-07-13T22:05:00.001Z"),
+      Date.parse("2026-07-13T23:05:00.001Z"),
+      Date.parse("2026-07-13T23:05:00.001Z"),
       "CHECK_FAILED",
       "WATCHDOG_SCHEDULE_TIME_INVALID",
     ],
     [
       "the handler starts before the Cloudflare scheduled time",
-      Date.parse("2026-07-13T22:00:00.000Z"),
-      Date.parse("2026-07-13T21:59:59.999Z"),
+      Date.parse("2026-07-13T23:00:00.000Z"),
+      Date.parse("2026-07-13T22:59:59.999Z"),
       "STALE_SCHEDULED_INVOCATION",
       "INVOCATION_LAG_OUT_OF_RANGE",
     ],
     [
       "the handler starts one millisecond beyond the maximum lag",
-      Date.parse("2026-07-13T22:00:00.000Z"),
-      Date.parse("2026-07-13T22:05:00.001Z"),
+      Date.parse("2026-07-13T23:00:00.000Z"),
+      Date.parse("2026-07-13T23:05:00.001Z"),
       "STALE_SCHEDULED_INVOCATION",
       "INVOCATION_LAG_OUT_OF_RANGE",
     ],
   ])("fails closed when %s", (_description, scheduledTime, invocationStartedAt, decision, reason) => {
     expect(
       validateScheduledInvocation({
-        controllerCron: "0 22 * * *",
+        controllerCron: "0 23 * * *",
         scheduledTime,
         invocationStartedAt,
       }),
@@ -92,11 +92,11 @@ describe("validateScheduledInvocation", () => {
   });
 
   it("fails closed when the handler itself starts after the observation window", () => {
-    const scheduledTime = Date.parse("2026-07-13T22:05:00.000Z");
+    const scheduledTime = Date.parse("2026-07-13T23:05:00.000Z");
 
     expect(
       validateScheduledInvocation({
-        controllerCron: "0 22 * * *",
+        controllerCron: "0 23 * * *",
         scheduledTime,
         invocationStartedAt: scheduledTime + 1,
       }),

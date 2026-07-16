@@ -41,7 +41,7 @@ def watchdog_provenance() -> dict[str, object]:
     return {
         "trigger_source": "watchdog",
         "trigger_event": "workflow_dispatch",
-        "trigger_schedule_expression": "0 22 * * *",
+        "trigger_schedule_expression": "0 23 * * *",
         "target_date": TARGET_DATE,
         "github": {
             "github_run_id": 123456,
@@ -54,8 +54,8 @@ def watchdog_provenance() -> dict[str, object]:
         "receipt_signature": "signed-receipt",
         "receipt": {
             "jti": "j" * 43,
-            "controller_cron": "0 22 * * *",
-            "controller_scheduled_time": 1783970400000,
+            "controller_cron": "0 23 * * *",
+            "controller_scheduled_time": 1783983600000,
             "target_date": TARGET_DATE,
             "github_run_id": 123456,
             "github_run_attempt": 1,
@@ -95,8 +95,8 @@ def workflow_context() -> dict[str, object]:
         "head_sha": "a" * 40,
         "branch": "main",
         "workflow_file": ".github/workflows/horizon_daily.yml",
-        "workflow_started_at": "2026-07-13T22:00:00Z",
-        "workflow_completed_at": "2026-07-13T22:01:00Z",
+        "workflow_started_at": "2026-07-13T23:00:00Z",
+        "workflow_completed_at": "2026-07-13T23:01:00Z",
         "artifact_name": "horizon-execution-manifest-123456",
     }
 
@@ -191,9 +191,9 @@ def test_evidence_cli_writes_only_noncanonical_run_files(tmp_path: Path) -> None
             "--branch",
             "main",
             "--workflow-started-at",
-            "2026-07-13T22:00:00Z",
+            "2026-07-13T23:00:00Z",
             "--workflow-completed-at",
-            "2026-07-13T22:01:00Z",
+            "2026-07-13T23:01:00Z",
             "--artifact-name",
             "horizon-execution-manifest-123456",
         ],

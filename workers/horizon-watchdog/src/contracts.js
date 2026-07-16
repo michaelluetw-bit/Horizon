@@ -1,4 +1,4 @@
-export const WATCHDOG_CRON = "0 22 * * *";
+export const WATCHDOG_CRON = "0 23 * * *";
 export const MAX_INVOCATION_LAG_MS = 300_000;
 
 export function targetDateForTaipei(epochMilliseconds) {
@@ -15,12 +15,12 @@ export function targetDateForTaipei(epochMilliseconds) {
 }
 
 function watchdogScheduledTime(targetDate) {
-  return Date.parse(`${targetDate}T06:00:00+08:00`);
+  return Date.parse(`${targetDate}T07:00:00+08:00`);
 }
 
 function isInsideWatchdogObservationWindow(targetDate, epochMilliseconds) {
-  const startsAt = Date.parse(`${targetDate}T05:55:00+08:00`);
-  const endsAt = Date.parse(`${targetDate}T06:05:00+08:00`);
+  const startsAt = Date.parse(`${targetDate}T06:55:00+08:00`);
+  const endsAt = Date.parse(`${targetDate}T07:05:00+08:00`);
   return epochMilliseconds >= startsAt && epochMilliseconds <= endsAt;
 }
 
