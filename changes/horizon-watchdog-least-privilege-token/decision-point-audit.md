@@ -1,8 +1,8 @@
 # Decision-Point Audit Report
 
 **变更**: horizon-watchdog-least-privilege-token
-**生成时间**: 2026-07-16T04:02:23.631Z
-**当前状态**: executing
+**生成时间**: 2026-07-16T04:04:46.128Z
+**当前状态**: closing
 
 ## 汇总表
 

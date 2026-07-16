@@ -2,7 +2,7 @@
 # Derived data. Always rebuildable from artifacts. Lost/corrupt → fall back to content-level detection.
 
 # === Core state ===
-state: executing
+state: closing
 workflow: hotfix
 revision: 3
 
@@ -20,9 +20,9 @@ spec_merged: false
 
 # === Metadata ===
 change_name: horizon-watchdog-least-privilege-token
-last_transition: 2026-07-16T03:15:06.389Z
-last_transition_from: approved-for-build
-last_transition_to: executing
+last_transition: 2026-07-16T04:04:30.536Z
+last_transition_from: executing
+last_transition_to: closing
 
 # === Decision points ===
 dp_0_decisions: change=horizon-watchdog-least-privilege-token; intent=replace broad OAuth Worker secret with a dedicated fine-grained token restricted to michaelluetw-bit/Horizon and Actions write, then remove SPEC_COMPLIANCE_EXCEPTION only after evidence; constraints=no token exposure, no manual workflow dispatch, no Worker/workflow behavior change unless strictly required, preserve P0-B2 ACCEPTED history, do not start P0-B3, use existing Vault; optimizations=stay focused; communication=draft for consolidated review, pause only for mandatory secure credential entry and decision gates
