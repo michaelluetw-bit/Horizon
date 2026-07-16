@@ -1,7 +1,7 @@
 {
   "mode": "batch-inline",
-  "source": "user-confirmed",
-  "rationale": "User selected the recommended batch-inline mode for one serial two-task credential-rotation wave.",
+  "source": "user-confirmed-revision",
+  "rationale": "Mechanical archive repair after the confirmed DP-7: add the two already-completed contract tasks to the guard artifact without changing scope, execution strategy, or production state.",
   "waves": [
     {
       "id": "credential-rotation",
@@ -13,10 +13,10 @@
       "depends_on": []
     }
   ],
-  "artifacts_hash": null,
+  "artifacts_hash": "sha256:54e4c3be61cb50fe5646e0a2452742f5a5f04a72cc9874fcf3343712187dbb83",
   "contract_hash": "sha256:087c1525e1882187f59bda28838171f7a594c99f10d16402d89fd9ccc780fa69",
   "workflow": "hotfix",
-  "revision": 1,
+  "revision": 2,
   "recommendation": {
     "available_modes": [
       "inline",
@@ -31,7 +31,7 @@
     },
     "facts": {
       "workflow": "hotfix",
-      "documented_task_count": null,
+      "documented_task_count": 2,
       "planned_task_count": 2,
       "planned_wave_count": 1,
       "has_parallel_wave": false,
@@ -53,7 +53,7 @@
       },
       "facts": {
         "workflow": "hotfix",
-        "documented_task_count": null,
+        "documented_task_count": 2,
         "planned_task_count": 2,
         "planned_wave_count": 1,
         "has_parallel_wave": false,
@@ -71,17 +71,17 @@
         "depends_on": []
       }
     ],
-    "artifacts_hash": null,
+    "artifacts_hash": "sha256:54e4c3be61cb50fe5646e0a2452742f5a5f04a72cc9874fcf3343712187dbb83",
     "contract_hash": "sha256:087c1525e1882187f59bda28838171f7a594c99f10d16402d89fd9ccc780fa69",
     "workflow": "hotfix",
-    "execution_plan_revision_at_recommendation": null,
-    "created_at": "2026-07-16T03:14:03.599Z",
-    "hash": "sha256:aead475131fb7bf2aab473f670f83b7b3f210b3a7c78ae7917a6f2a829f83a0c"
+    "execution_plan_revision_at_recommendation": 1,
+    "created_at": "2026-07-16T03:57:55.947Z",
+    "hash": "sha256:5bceeba0d82243525af3bf0253c59d4d5deafec5bacae66aaa6e997de4525b4b"
   },
   "selection": {
     "confirmed": true,
     "followed_recommendation": true,
     "acknowledged_non_recommendation": false
   },
-  "hash": "sha256:9167ea54373977499b44ac4925362a2f0b22845d5e1d3430a6889cb96ad622a1"
+  "hash": "sha256:e8dfa35e6da68b8255c696d2be7f579b772294d620de0dc65be393b00c7d8fd7"
 }

@@ -4,16 +4,16 @@
 # === Core state ===
 state: executing
 workflow: hotfix
-revision: 1
+revision: 2
 
 # === Hashes (fast staleness detection) ===
-artifacts_hash: null
+artifacts_hash: sha256:54e4c3be61cb50fe5646e0a2452742f5a5f04a72cc9874fcf3343712187dbb83
 contract_hash: sha256:087c1525e1882187f59bda28838171f7a594c99f10d16402d89fd9ccc780fa69
 
 # === Execution progress ===
 execution_mode: batch-inline
-execution_plan_hash: sha256:9167ea54373977499b44ac4925362a2f0b22845d5e1d3430a6889cb96ad622a1
-execution_plan_revision: 1
+execution_plan_hash: sha256:e8dfa35e6da68b8255c696d2be7f579b772294d620de0dc65be393b00c7d8fd7
+execution_plan_revision: 2
 batches_completed: 1
 test_result: pass
 spec_merged: false
@@ -25,21 +25,21 @@ last_transition_from: approved-for-build
 last_transition_to: executing
 
 # === Decision points ===
-dp_0_decisions: change=horizon-watchdog-least-privilege-token; intent=replace broad OAuth Worker secret with a dedicated fine-grained token restricted to michaelluetw-bit/Horizon and Actions write, then remove SPEC_COMPLIANCE_EXCEPTION only after evidence; constraints=no token exposure, no manual workflow dispatch, no Worker/workflow behavior change unless strictly required, preserve P0-B2 FAILED history, do not start P0-B3, use existing Vault; optimizations=stay focused; communication=draft for consolidated review, pause only for mandatory secure credential entry and decision gates
+dp_0_decisions: change=horizon-watchdog-least-privilege-token; intent=replace broad OAuth Worker secret with a dedicated fine-grained token restricted to michaelluetw-bit/Horizon and Actions write, then remove SPEC_COMPLIANCE_EXCEPTION only after evidence; constraints=no token exposure, no manual workflow dispatch, no Worker/workflow behavior change unless strictly required, preserve P0-B2 ACCEPTED history, do not start P0-B3, use existing Vault; optimizations=stay focused; communication=draft for consolidated review, pause only for mandatory secure credential entry and decision gates
 dp_0_result: confirmed
 dp_0_confirmed: true
 dp_0_timestamp: 2026-07-16T03:07:32Z
-dp_1_result: null
-dp_1_timestamp: null
-dp_2_result: null
-dp_2_timestamp: null
-dp_3_result: approved: minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 FAILED and do not start P0-B3
-dp_3_timestamp: 2026-07-16T03:11:45Z
-dp_4_result: batch-inline: plan revision 1; user-confirmed; User selected the recommended batch-inline mode for one serial two-task credential-rotation wave.
-dp_4_timestamp: 2026-07-16T03:15:02.584Z
-dp_5_result: null
-dp_5_timestamp: null
-dp_6_result: null
-dp_6_timestamp: null
-dp_7_result: null
-dp_7_timestamp: null
+dp_1_result: skipped: hotfix fast-path; bounded credential-only remediation
+dp_1_timestamp: 2026-07-16T03:40:48Z
+dp_2_result: skipped: hotfix fast-path; no standalone delta-spec phase
+dp_2_timestamp: 2026-07-16T03:40:48Z
+dp_3_result: approved: minimal two-task hotfix contract; secure user-only token creation and input; no workflow dispatch; preserve P0-B2 ACCEPTED and do not start P0-B3
+dp_3_timestamp: 2026-07-16T03:40:48Z
+dp_4_result: batch-inline: plan revision 2; user-confirmed mode retained; mechanical archive repair added the two already-completed tasks required by the closing guard without changing scope
+dp_4_timestamp: 2026-07-16T03:58:39.285Z
+dp_5_result: not-applicable: no three-fix debugging threshold or architectural escalation
+dp_5_timestamp: 2026-07-16T03:40:48Z
+dp_6_result: pass: Python CI 327 tests, Watchdog CI 57 tests, runtime secret-only rotation invariants, no manual dispatch, Vault acceptance invariants
+dp_6_timestamp: 2026-07-16T03:40:48Z
+dp_7_result: confirmed: archive least-privilege Worker credential closeout with P0-B2 ACCEPTED preserved, P0-B2R spec-compliant ACCEPTED, no manual dispatch, and P0-B3 not started
+dp_7_timestamp: 2026-07-16T03:58:39.285Z
