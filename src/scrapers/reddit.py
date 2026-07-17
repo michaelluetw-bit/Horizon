@@ -389,14 +389,17 @@ class RedditScraper(BaseScraper):
 
     async def _fetch_comments(self, subreddit: str, post_id: str) -> List[dict]:
         fetch_limit = self.reddit_config.fetch_comments
-        html_comments = await self._fetch_comments_html(subreddit, post_id, fetch_limit)
-        if html_comments:
-            return html_comments
 
-        url = f"{REDDIT_BASE}/r/{subreddit}/comments/{post_id}.json"
-        params = {"limit": fetch_limit, "depth": 1, "sort": "top", "raw_json": 1}
-
+        # Both the old-Reddit HTML path and the JSON fallback must respect
+        # the comment concurrency cap, otherwise one request per post fires
+        # at once and Reddit rate-limits or blocks the client.
         async with self._comment_semaphore:
+            html_comments = await self._fetch_comments_html(subreddit, post_id, fetch_limit)
+            if html_comments:
+                return html_comments
+
+            url = f"{REDDIT_BASE}/r/{subreddit}/comments/{post_id}.json"
+            params = {"limit": fetch_limit, "depth": 1, "sort": "top", "raw_json": 1}
             data = await self._reddit_get(url, params)
         if not data or not isinstance(data, list) or len(data) < 2:
             return []
