@@ -112,17 +112,40 @@ def test_placeholder_words_mid_sentence_do_not_block_publishing(tmp_path: Path) 
 
 
 def test_bracketed_placeholder_markers_still_block_publishing(tmp_path: Path) -> None:
+    markers = (
+        "a [TODO] marker left behind",
+        "a [TODO: replace this section] marker left behind",
+        "a <placeholder: add summary> marker left behind",
+        "a {tbd — numbers pending} marker left behind",
+    )
+    for marker_text in markers:
+        write_complete_set(tmp_path)
+        summary = tmp_path / f"data/summaries/horizon-{TARGET_DATE}-en.md"
+        summary.write_text(
+            f"# Horizon Daily - {TARGET_DATE}\n\nReal intro text with {marker_text}.\n",
+            encoding="utf-8",
+        )
+
+        result = inspect_canonical_set(tmp_path, TARGET_DATE)
+
+        assert result.status == CANONICAL_SET_INCOMPLETE, marker_text
+        assert (
+            f"PLACEHOLDER_PRESENT:data/summaries/horizon-{TARGET_DATE}-en.md" in result.issues
+        ), marker_text
+
+
+def test_markdown_link_title_starting_with_todo_does_not_block_publishing(tmp_path: Path) -> None:
     write_complete_set(tmp_path)
     summary = tmp_path / f"data/summaries/horizon-{TARGET_DATE}-en.md"
     summary.write_text(
-        f"# Horizon Daily - {TARGET_DATE}\n\nReal intro text with a [TODO] marker left behind.\n",
+        f"# Horizon Daily - {TARGET_DATE}\n\n"
+        "1. Read [TODO apps are quietly dying](https://example.com/story) for context.\n",
         encoding="utf-8",
     )
 
     result = inspect_canonical_set(tmp_path, TARGET_DATE)
 
-    assert result.status == CANONICAL_SET_INCOMPLETE
-    assert f"PLACEHOLDER_PRESENT:data/summaries/horizon-{TARGET_DATE}-en.md" in result.issues
+    assert result.status == COMPLETE
 
 
 def test_preflight_stops_on_partial_main_before_considering_the_publish_branch(tmp_path: Path) -> None:
