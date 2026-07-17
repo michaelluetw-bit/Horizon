@@ -18,6 +18,15 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SYNC_DATE = "2026-07-13"
 
+# The sync contract exercises scripts/sync_latest.ps1 end to end, which needs
+# Windows PowerShell. On other platforms (local Linux/macOS development) skip
+# these tests instead of failing with FileNotFoundError; CI runs on
+# windows-latest and always executes them.
+requires_powershell = pytest.mark.skipif(
+    shutil.which("powershell.exe") is None,
+    reason="sync_latest.ps1 contract tests require Windows PowerShell",
+)
+
 
 def run_git(args: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
@@ -181,6 +190,7 @@ def run_sync(project: Path, target: Path, dashboard_base_url: str, tmp_path: Pat
     )
 
 
+@requires_powershell
 def test_sync_publishes_origin_main_blob_when_worktree_is_clean(tmp_path: Path) -> None:
     source_body = f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式來源：繁體中文。\n"
     project = create_sync_project(tmp_path, source_body)
@@ -196,6 +206,7 @@ def test_sync_publishes_origin_main_blob_when_worktree_is_clean(tmp_path: Path) 
     assert run_git(["status", "--short"], cwd=project).stdout == ""
 
 
+@requires_powershell
 def test_sync_rejects_invalid_origin_summary(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, "# 不符合 Horizon 契約\n\n內容。\n")
     target = tmp_path / "vault" / "01_Horizon"
@@ -208,6 +219,7 @@ def test_sync_rejects_invalid_origin_summary(tmp_path: Path) -> None:
     assert not target.exists()
 
 
+@requires_powershell
 def test_sync_publishes_origin_blob_when_local_generated_summary_is_dirty(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n舊版來源。\n")
     origin_body = f"# Horizon 每日快遞 - {SYNC_DATE}\n\norigin/main 正式內容：罕見字：臺灣、😀、軟件。\n"
@@ -234,6 +246,7 @@ def test_sync_publishes_origin_blob_when_local_generated_summary_is_dirty(tmp_pa
 
 
 @pytest.mark.parametrize("relative_path", ["scripts/guard.ps1", "src/guard.py", "config/publish.json"])
+@requires_powershell
 def test_sync_rejects_dirty_code_or_configuration(tmp_path: Path, relative_path: str) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式內容。\n")
     dirty_path = project / relative_path
@@ -249,6 +262,7 @@ def test_sync_rejects_dirty_code_or_configuration(tmp_path: Path, relative_path:
     assert dirty_path.read_text(encoding="utf-8") == "local change\n"
 
 
+@requires_powershell
 def test_sync_reports_missing_today_origin_output(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n舊本機內容。\n")
     remove_origin_source(tmp_path, project)
@@ -264,6 +278,7 @@ def test_sync_reports_missing_today_origin_output(tmp_path: Path) -> None:
     assert "舊本機內容" in local_source.read_text(encoding="utf-8")
 
 
+@requires_powershell
 def test_sync_is_idempotent_for_the_same_origin_blob(tmp_path: Path) -> None:
     source_body = f"# Horizon 每日快遞 - {SYNC_DATE}\n\n同日正式內容。\n"
     project = create_sync_project(tmp_path, source_body)
@@ -282,6 +297,7 @@ def test_sync_is_idempotent_for_the_same_origin_blob(tmp_path: Path) -> None:
     assert run_git(["status", "--short"], cwd=project).stdout == ""
 
 
+@requires_powershell
 def test_sync_reports_origin_fetch_failure(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式內容。\n")
     run_git(["remote", "set-url", "origin", str(tmp_path / "missing-origin.git")], cwd=project)
@@ -565,6 +581,7 @@ def test_sync_script_selects_chinese_source_when_bilingual_summaries_exist() -> 
     assert "$sourceDir = Join-Path $ProjectRoot" not in script
 
 
+@requires_powershell
 def test_sync_invalid_repository_returns_code_10_without_creating_target(tmp_path: Path) -> None:
     script = ROOT / "scripts/sync_latest.ps1"
     target = tmp_path / "vault" / "01_Horizon"

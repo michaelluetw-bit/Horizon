@@ -97,6 +97,34 @@ def test_three_files_or_an_invalid_file_are_each_incomplete(tmp_path: Path) -> N
     assert f"PLACEHOLDER_PRESENT:data/summaries/horizon-{TARGET_DATE}-en.md" in invalid_result.issues
 
 
+def test_placeholder_words_mid_sentence_do_not_block_publishing(tmp_path: Path) -> None:
+    write_complete_set(tmp_path)
+    summary = tmp_path / f"data/summaries/horizon-{TARGET_DATE}-en.md"
+    summary.write_text(
+        f"# Horizon Daily - {TARGET_DATE}\n\n"
+        "A review of the best TODO apps, with pricing still tbd for some tools.\n",
+        encoding="utf-8",
+    )
+
+    result = inspect_canonical_set(tmp_path, TARGET_DATE)
+
+    assert result.status == COMPLETE
+
+
+def test_bracketed_placeholder_markers_still_block_publishing(tmp_path: Path) -> None:
+    write_complete_set(tmp_path)
+    summary = tmp_path / f"data/summaries/horizon-{TARGET_DATE}-en.md"
+    summary.write_text(
+        f"# Horizon Daily - {TARGET_DATE}\n\nReal intro text with a [TODO] marker left behind.\n",
+        encoding="utf-8",
+    )
+
+    result = inspect_canonical_set(tmp_path, TARGET_DATE)
+
+    assert result.status == CANONICAL_SET_INCOMPLETE
+    assert f"PLACEHOLDER_PRESENT:data/summaries/horizon-{TARGET_DATE}-en.md" in result.issues
+
+
 def test_preflight_stops_on_partial_main_before_considering_the_publish_branch(tmp_path: Path) -> None:
     main_root = tmp_path / "main"
     publish_root = tmp_path / "publish"

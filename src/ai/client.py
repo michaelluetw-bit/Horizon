@@ -168,6 +168,8 @@ class AnthropicClient(AIClient):
                 input_tokens=getattr(usage, "input_tokens", 0),
                 output_tokens=getattr(usage, "output_tokens", 0),
             )
+        if not message.content:
+            return ""
         return message.content[0].text
 
 
@@ -440,7 +442,7 @@ class AzureOpenAIClient(AIClient):
         usage = getattr(response, "usage", None)
         if usage is not None:
             record_usage(
-                "openai",
+                "azure",
                 input_tokens=getattr(usage, "prompt_tokens", 0),
                 output_tokens=getattr(usage, "completion_tokens", 0),
             )
@@ -578,6 +580,10 @@ class ChainedAIClient(AIClient):
         client_factory: Optional[Any] = None,
     ):
         self.configs = configs
+        # Expose the primary config so callers that read settings such as
+        # throttle_sec / analysis_concurrency / languages via
+        # getattr(client, "config", None) keep working when chaining.
+        self.config = configs[0] if configs else None
         self._client_factory = client_factory or _create_single_client
         self._client_cache: Dict[int, AIClient] = {}
         # Allow tests to inject pre-built clients directly
@@ -628,6 +634,10 @@ class ChainedAIClient(AIClient):
             return True
         if "empty response" in msg:
             return True
+        # Network-level failures (SDKs raise e.g. "Connection error." or
+        # "Request timed out.") — the next provider may still be reachable.
+        if "connection" in msg or "timed out" in msg or "timeout" in msg:
+            return True
         return False
 
 
@@ -647,14 +657,28 @@ def _create_chained_client(config: AIConfig) -> ChainedAIClient:
             raise ValueError(f"Unsupported AI provider in chain: {name}")
 
         defaults = AI_PROVIDER_DEFAULTS.get(provider, {})
+        # The user-configured model / api_key_env / base_url describe the
+        # configured provider only; other providers in the chain fall back
+        # to their own defaults so e.g. an Ollama base_url never leaks into
+        # a DeepSeek fallback client.
+        is_configured_provider = provider == config.provider
         cfg = AIConfig(
             provider=provider,
-            model=defaults.get("model", config.model),
-            api_key_env=defaults.get("api_key_env", config.api_key_env),
-            base_url=config.base_url,
+            model=config.model if is_configured_provider else defaults.get("model", config.model),
+            api_key_env=(
+                config.api_key_env
+                if is_configured_provider
+                else defaults.get("api_key_env", config.api_key_env)
+            ),
+            base_url=config.base_url if is_configured_provider else None,
             temperature=config.temperature,
             max_tokens=config.max_tokens,
+            throttle_sec=config.throttle_sec,
+            analysis_concurrency=config.analysis_concurrency,
+            enrichment_concurrency=config.enrichment_concurrency,
             languages=config.languages,
+            azure_endpoint_env=config.azure_endpoint_env if is_configured_provider else None,
+            api_version=config.api_version if is_configured_provider else None,
         )
         chain_configs.append(cfg)
 

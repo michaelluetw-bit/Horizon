@@ -81,92 +81,73 @@ class EmailManager:
             mail.login(self.config.email_address, self.pwd)
             mail.select("INBOX")
 
-            keyword = self.config.subscribe_keyword
-            safe_keyword = keyword.replace("\\", "\\\\").replace('"', '\\"')
-            search_crit = f'(UNSEEN SUBJECT "{safe_keyword}")'
+            subscribers = storage_manager.load_subscribers()
 
-            status, messages = mail.search(None, search_crit)
+            for email_addr in self._collect_request_senders(mail, self.config.subscribe_keyword):
+                if len(subscribers) >= _MAX_SUBSCRIBERS:
+                    logger.warning(
+                        "Max subscriber limit (%d) reached, skipping %s",
+                        _MAX_SUBSCRIBERS, email_addr,
+                    )
+                    continue
+                if email_addr not in subscribers:
+                    storage_manager.add_subscriber(email_addr)
+                    subscribers = storage_manager.load_subscribers()
+                    self._send_reply(
+                        email_addr,
+                        "Subscribed to Horizon",
+                        "You have been successfully subscribed to Horizon daily summaries.",
+                    )
+                    logger.info(f"Added subscriber: {email_addr}")
+                else:
+                    logger.info(f"Already subscribed: {email_addr}")
 
-            if status == "OK" and messages[0]:
-                email_ids = messages[0].split()
-                subscribers = storage_manager.load_subscribers()
-
-                for e_id in email_ids:
-                    _, msg_data = mail.fetch(e_id, "(RFC822)")
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
-
-                            subject = str(msg.get("Subject") or "").strip()
-                            if subject.upper() != keyword.upper():
-                                continue
-
-                            sender = msg.get("From")
-
-                            if sender:
-                                _, email_addr = parseaddr(sender)
-                                if email_addr and _is_valid_subscriber_email(email_addr):
-                                    if len(subscribers) >= _MAX_SUBSCRIBERS:
-                                        logger.warning(
-                                            "Max subscriber limit (%d) reached, skipping %s",
-                                            _MAX_SUBSCRIBERS, email_addr,
-                                        )
-                                        continue
-
-                                    if email_addr not in subscribers:
-                                        storage_manager.add_subscriber(email_addr)
-                                        subscribers = storage_manager.load_subscribers()
-                                        self._send_reply(
-                                            email_addr,
-                                            "Subscribed to Horizon",
-                                            "You have been successfully subscribed to Horizon daily summaries.",
-                                        )
-                                        logger.info(f"Added subscriber: {email_addr}")
-                                    else:
-                                        logger.info(f"Already subscribed: {email_addr}")
-
-            unsub_keyword = self.config.unsubscribe_keyword
-            safe_unsub_keyword = unsub_keyword.replace("\\", "\\\\").replace('"', '\\"')
-            search_crit_unsub = f'(UNSEEN SUBJECT "{safe_unsub_keyword}")'
-
-            status, messages = mail.search(None, search_crit_unsub)
-
-            if status == "OK" and messages[0]:
-                email_ids = messages[0].split()
-                subscribers = storage_manager.load_subscribers()
-
-                for e_id in email_ids:
-                    _, msg_data = mail.fetch(e_id, "(RFC822)")
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
-
-                            subject = str(msg.get("Subject") or "").strip()
-                            if subject.upper() != unsub_keyword.upper():
-                                continue
-
-                            sender = msg.get("From")
-
-                            if sender:
-                                _, email_addr = parseaddr(sender)
-                                if email_addr and _is_valid_subscriber_email(email_addr):
-                                    if email_addr in subscribers:
-                                        storage_manager.remove_subscriber(email_addr)
-                                        subscribers = storage_manager.load_subscribers()
-                                        self._send_reply(
-                                            email_addr,
-                                            "Unsubscribed from Horizon",
-                                            "You have been successfully unsubscribed from Horizon daily summaries.",
-                                        )
-                                        logger.info(f"Removed subscriber: {email_addr}")
-                                    else:
-                                        logger.info(f"Not subscribed: {email_addr}")
+            for email_addr in self._collect_request_senders(mail, self.config.unsubscribe_keyword):
+                if email_addr in subscribers:
+                    storage_manager.remove_subscriber(email_addr)
+                    subscribers = storage_manager.load_subscribers()
+                    self._send_reply(
+                        email_addr,
+                        "Unsubscribed from Horizon",
+                        "You have been successfully unsubscribed from Horizon daily summaries.",
+                    )
+                    logger.info(f"Removed subscriber: {email_addr}")
+                else:
+                    logger.info(f"Not subscribed: {email_addr}")
 
             mail.close()
             mail.logout()
 
         except Exception as e:
             logger.error(f"Error checking subscriptions: {e}")
+
+    @staticmethod
+    def _collect_request_senders(mail, keyword: str) -> List[str]:
+        """Return validated sender addresses of unseen mails whose subject equals *keyword*."""
+        safe_keyword = keyword.replace("\\", "\\\\").replace('"', '\\"')
+        status, messages = mail.search(None, f'(UNSEEN SUBJECT "{safe_keyword}")')
+        if status != "OK" or not messages[0]:
+            return []
+
+        addresses: List[str] = []
+        for e_id in messages[0].split():
+            _, msg_data = mail.fetch(e_id, "(RFC822)")
+            for response_part in msg_data:
+                if not isinstance(response_part, tuple):
+                    continue
+                msg = email.message_from_bytes(response_part[1])
+
+                subject = str(msg.get("Subject") or "").strip()
+                if subject.upper() != keyword.upper():
+                    continue
+
+                sender = msg.get("From")
+                if not sender:
+                    continue
+                _, email_addr = parseaddr(sender)
+                if email_addr and _is_valid_subscriber_email(email_addr):
+                    addresses.append(email_addr)
+        return addresses
 
     def send_daily_summary(self, summary_md: str, subject: str, subscribers: List[str]):
         """Sends the daily summary to all subscribers."""
@@ -175,6 +156,10 @@ class EmailManager:
 
         cleaned_summary = clean_app_summary_markdown(summary_md)
         safe_summary = html.escape(cleaned_summary)
+        # html.escape protects against HTML injection from scraped content,
+        # but it also mangles Markdown blockquote markers at line starts;
+        # restore those so quotes still render.
+        safe_summary = re.sub(r"(?m)^([ \t]*)&gt; ", r"\1> ", safe_summary)
         html_content = (
             markdown.markdown(safe_summary)
             if markdown

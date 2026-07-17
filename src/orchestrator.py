@@ -165,7 +165,12 @@ class HorizonOrchestrator:
                 # Copy to docs/ for GitHub Pages
                 try:
                     post_filename = f"{today}-summary-{lang}.md"
-                    posts_dir = Path("docs/_posts")
+                    # Anchor docs/ next to the storage data directory so the
+                    # post lands in the project tree even when the process is
+                    # started from another working directory.
+                    data_dir = getattr(self.storage, "data_dir", None)
+                    project_root = Path(data_dir).parent if data_dir else Path(".")
+                    posts_dir = project_root / "docs" / "_posts"
                     posts_dir.mkdir(parents=True, exist_ok=True)
 
                     dest_path = posts_dir / post_filename
@@ -388,12 +393,15 @@ class HorizonOrchestrator:
         """
         def normalize_url(url: str) -> str:
             parsed = urlparse(str(url))
-            # Strip www prefix, trailing slashes, and fragments
+            # Strip www prefix, trailing slashes, and fragments; keep the
+            # query string because it can identify distinct resources
+            # (e.g. youtube.com/watch?v=A vs watch?v=B).
             host = parsed.hostname or ""
             if host.startswith("www."):
                 host = host[4:]
             path = parsed.path.rstrip("/")
-            return f"{host}{path}"
+            query = f"?{parsed.query}" if parsed.query else ""
+            return f"{host}{path}{query}"
 
         # Group by normalized URL
         url_groups: Dict[str, List[ContentItem]] = {}
@@ -480,6 +488,8 @@ class HorizonOrchestrator:
             if not isinstance(group, list) or len(group) < 2:
                 continue
             primary_idx = group[0]
+            if not isinstance(primary_idx, int) or isinstance(primary_idx, bool):
+                continue
             if primary_idx < 0 or primary_idx >= len(items):
                 continue
             primary = items[primary_idx]

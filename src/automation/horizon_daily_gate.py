@@ -17,7 +17,16 @@ ALREADY_PUBLISHED = "ALREADY_PUBLISHED"
 ALREADY_IN_PROGRESS = "ALREADY_IN_PROGRESS"
 READY = "READY"
 
-PLACEHOLDER_PATTERN = re.compile(r"\b(?:placeholder|todo|tbd)\b", re.IGNORECASE)
+# Flag placeholder markers only when they lead a line (optionally after
+# Markdown heading/list/quote punctuation) or appear in bracketed marker
+# form ([TODO], {placeholder}, <tbd>). A summary that merely mentions such
+# a word mid-sentence (e.g. news about "TODO apps") must not block
+# publishing.
+PLACEHOLDER_PATTERN = re.compile(
+    r"(?m)(?:^[ \t]*(?:[#>*+-][ \t]*)*(?:placeholder|todo|tbd)\b"
+    r"|[\[{<](?:placeholder|todo|tbd)[\]}>])",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
