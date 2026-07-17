@@ -50,7 +50,7 @@ def test_merge_keeps_urls_that_differ_only_in_query_string() -> None:
 
 def test_merge_still_collapses_same_url_across_sources() -> None:
     items = [
-        make_item("a", "https://www.example.com/story/?utm=x".split("?")[0], SourceType.REDDIT),
+        make_item("a", "https://www.example.com/story/", SourceType.REDDIT),
         make_item("b", "https://example.com/story", SourceType.HACKERNEWS),
     ]
 
@@ -58,6 +58,26 @@ def test_merge_still_collapses_same_url_across_sources() -> None:
 
     assert len(merged) == 1
     assert set(merged[0].metadata["merged_sources"]) == {"reddit", "hackernews"}
+
+
+def test_merge_ignores_tracking_parameters_but_keeps_identifying_ones() -> None:
+    # utm_* / ref only carry attribution — the same story must merge.
+    items = [
+        make_item("a", "https://example.com/story?utm_source=reddit&ref=share", SourceType.REDDIT),
+        make_item("b", "https://example.com/story", SourceType.HACKERNEWS),
+    ]
+    merged = make_orchestrator().merge_cross_source_duplicates(items)
+    assert len(merged) == 1
+
+    # `v` identifies the video — different values must stay separate,
+    # regardless of extra tracking params or param ordering.
+    items = [
+        make_item("c", "https://youtube.com/watch?v=aaa&utm_source=x", SourceType.REDDIT),
+        make_item("d", "https://www.youtube.com/watch?utm_source=y&v=aaa", SourceType.HACKERNEWS),
+        make_item("e", "https://youtube.com/watch?v=bbb", SourceType.RSS),
+    ]
+    merged = make_orchestrator().merge_cross_source_duplicates(items)
+    assert len(merged) == 2
 
 
 def test_topic_dedup_ignores_groups_with_non_integer_primary_index(monkeypatch) -> None:
