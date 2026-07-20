@@ -86,7 +86,9 @@ def convert_to_taiwan(markdown: str) -> str:
 
 
 def validate_source_markdown(markdown: str, artifact_date: str) -> None:
-    clean_body = re.sub(r"\A---\s*\n.*?\n---\s*\n?", "", markdown, flags=re.DOTALL).strip()
+    if markdown.startswith("---\n") or markdown.startswith("---\r\n"):
+        raise PublishError("SOURCE_INVALID", "Source must not contain YAML frontmatter")
+    clean_body = markdown.strip()
     if not clean_body:
         raise PublishError("SOURCE_INVALID", "Source Markdown is empty")
     expected_heading = f"# Horizon 每日快遞 - {artifact_date}"

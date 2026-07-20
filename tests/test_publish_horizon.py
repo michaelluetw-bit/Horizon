@@ -128,6 +128,24 @@ def test_publish_blob_normalizes_only_crlf_for_raw(tmp_path: Path) -> None:
     assert raw.read_bytes() == source_body.replace("\r\n", "\n").encode("utf-8")
 
 
+def test_publish_blob_rejects_frontmatter_without_writing_vault(tmp_path: Path) -> None:
+    source_ref = f"data/summaries/horizon-{DATE}-zh.md"
+    source_body = f"---\ntitle: source\n---\n# Horizon 每日快遞 - {DATE}\n"
+    vault_root = tmp_path / "vault"
+    write_vault_baseline(vault_root)
+    index = (vault_root / "wiki" / "index.md").read_text(encoding="utf-8")
+    log = (vault_root / "wiki" / "log.md").read_text(encoding="utf-8")
+
+    with pytest.raises(PublishError, match="SOURCE_INVALID") as error:
+        publish_blob(source_body.encode("utf-8"), vault_root, DATE, source_ref)
+
+    assert error.value.status == "SOURCE_INVALID"
+    assert not (vault_root / "raw").exists()
+    assert not (vault_root / "wiki" / "Horizon").exists()
+    assert (vault_root / "wiki" / "index.md").read_text(encoding="utf-8") == index
+    assert (vault_root / "wiki" / "log.md").read_text(encoding="utf-8") == log
+
+
 def test_invalid_source_does_not_replace_existing_artifact(tmp_path: Path) -> None:
     source_dir = tmp_path / "data" / "summaries"
     source_dir.mkdir(parents=True)
