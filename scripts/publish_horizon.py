@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import sys
@@ -16,9 +17,7 @@ from opencc import OpenCC
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_DIR = PROJECT_ROOT / "data" / "summaries"
-DEFAULT_TARGET_DIR = Path(
-    r"C:\Users\micha\Documents\2026_agent\download\knowledge\19_codex\AI Executive Dashboard\01_Horizon"
-)
+DEFAULT_VAULT_ROOT = Path(r"C:\Users\micha\Documents\myvault")
 TAIPEI = ZoneInfo("Asia/Taipei")
 EXIT_CODES = {
     "SUCCESS": 0,
@@ -87,7 +86,9 @@ def convert_to_taiwan(markdown: str) -> str:
 
 
 def validate_source_markdown(markdown: str, artifact_date: str) -> None:
-    clean_body = re.sub(r"\A---\s*\n.*?\n---\s*\n?", "", markdown, flags=re.DOTALL).strip()
+    if markdown.startswith("---\n") or markdown.startswith("---\r\n"):
+        raise PublishError("SOURCE_INVALID", "Source must not contain YAML frontmatter")
+    clean_body = markdown.strip()
     if not clean_body:
         raise PublishError("SOURCE_INVALID", "Source Markdown is empty")
     expected_heading = f"# Horizon 每日快遞 - {artifact_date}"
@@ -95,77 +96,144 @@ def validate_source_markdown(markdown: str, artifact_date: str) -> None:
         raise PublishError("SOURCE_INVALID", f"Expected heading: {expected_heading}")
 
 
-def build_output(source_ref: str, artifact_date: str, body: str) -> str:
-    clean_body = re.sub(r"\A---\s*\n.*?\n---\s*\n?", "", body, flags=re.DOTALL).strip()
-    if not clean_body:
-        raise PublishError("SOURCE_INVALID", "Source Markdown is empty")
+def normalize_raw_bytes(source_bytes: bytes, artifact_date: str) -> tuple[str, bytes]:
+    try:
+        source_text = source_bytes.decode("utf-8", errors="strict")
+    except UnicodeError as exc:
+        raise PublishError("SOURCE_INVALID", "Source is not valid UTF-8") from exc
+    validate_source_markdown(source_text, artifact_date)
+    return source_text, source_text.replace("\r\n", "\n").encode("utf-8")
 
+
+def raw_relative_path(artifact_date: str) -> Path:
+    year, month, day = artifact_date.split("-")
+    return Path("raw") / year / month / day / f"horizon-{artifact_date}-zh.md"
+
+
+def horizon_wiki_relative_path(artifact_date: str) -> Path:
+    return Path("wiki") / "Horizon" / f"{artifact_date} Horizon.md"
+
+
+def wiki_link(relative: Path) -> str:
+    return relative.with_suffix("").as_posix()
+
+
+def horizon_wiki_output(
+    artifact_date: str,
+    source_ref: str,
+    raw_relative: Path,
+    source_sha256: str,
+    raw_sha256: str,
+    raw_text: str,
+) -> str:
+    heading = f"# Horizon 每日快遞 - {artifact_date}"
+    content = raw_text.replace("\r\n", "\n")
+    if content.startswith(heading):
+        content = content[len(heading) :].lstrip("\n")
+    raw_link = wiki_link(raw_relative)
     return f'''---
 title: "{artifact_date} Horizon"
-date: "{artifact_date}"
-module: "horizon"
-agent: "Horizon"
-status: "completed"
-source: "{source_ref}"
-source_type: "horizon-export"
-tags:
-  - ai-executive-dashboard
-  - horizon
-  - published-artifact
+type: wiki
+status: active
+created: {artifact_date}
+sources:
+  - "[[{raw_link}]]"
 ---
 
-# {artifact_date} Horizon
+{heading}
+
+> [!info] 原始來源
+> - Horizon `origin/main`：`{source_ref}`
+> - Vault 原文：[[{raw_link}|Horizon {artifact_date} 原始摘要]]
+> - 原始來源 SHA-256：`{source_sha256}`
+> - Vault 落地 SHA-256：`{raw_sha256}`
+> - 正規化：僅將 CRLF 轉為 LF；可見文字未變。
 
 ## Bottom Line
 
-Horizon 已產出 {artifact_date} 原始摘要，並以確定性格式發布至 Dashboard 的單一知識庫。
+Horizon {artifact_date} 原始摘要已攝取；內容與來源可由下方 Wiki 與 Raw 交叉查閱。
 
-## Signals
+## Horizon 原始摘要
 
-- 來源檔案：`{source_ref}`
-- 發布檔案：`01_Horizon/{artifact_date}-horizon.md`
-
-## Why It Matters
-
-此成果維持 Horizon、Published Artifact 與 Dashboard 之間的固定資料邊界。
-
-## Home Impact
-
-Home 應將此檔案識別為 {artifact_date} 的正式 Horizon artifact。
-
-## Save / Ignore Decision
-
-待每日閱讀驗證決定；Publisher 不代替內容品質判斷。
-
-## Next Action
-
-確認 Home 顯示今日 artifact，再進行每日內容品質驗證。
-
-## Sources
-
-- `{source_ref}`
-
-## Horizon 原始摘要（繁體中文）
-
-{clean_body}
+{content.rstrip()}
 '''
 
 
-def validate_output(markdown: str, artifact_date: str, source_ref: str) -> None:
-    required_fields = (
-        f'title: "{artifact_date} Horizon"',
-        f'date: "{artifact_date}"',
-        'module: "horizon"',
-        'agent: "Horizon"',
-        'status: "completed"',
-        f'source: "{source_ref}"',
-    )
-    missing_fields = [field for field in required_fields if field not in markdown]
-    missing_headings = [heading for heading in REQUIRED_HEADINGS if f"## {heading}" not in markdown]
-    if missing_fields or missing_headings:
-        detail = ", ".join(missing_fields + missing_headings)
-        raise PublishError("PUBLISH_FAILED", f"Output validation failed: {detail}")
-    markdown.encode("utf-8", errors="strict")
+def require_text(path: Path, label: str) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="strict")
+    except OSError as exc:
+        raise PublishError("PUBLISH_FAILED", f"Missing {label}: {path}") from exc
+
+
+def update_horizon_index(index: str, artifact_date: str) -> str:
+    link = f"- **Horizon 每日快遞**：[[wiki/Horizon/{artifact_date} Horizon|{artifact_date} Horizon]]"
+    newline = "\r\n" if "\r\n" in index else "\n"
+    pattern = re.compile(r"(?m)^- \*\*Horizon 每日快遞\*\*：.*$")
+    if pattern.search(index):
+        return pattern.sub(link, index)
+    marker = "## 🚀 快速入口"
+    if marker not in index:
+        raise PublishError("PUBLISH_FAILED", "Wiki index is missing the quick-entry section")
+    return index.replace(marker, f"{marker}{newline}{newline}{link}", 1)
+
+
+def append_log_entry(log: str, entry: str) -> str:
+    if entry in log:
+        return log
+    newline = "\r\n" if "\r\n" in log else "\n"
+    return f"{log.rstrip()}" + newline + entry + newline
+
+
+def existing_matches(path: Path, expected: bytes) -> bool:
+    if not path.exists():
+        return False
+    try:
+        return path.read_bytes() == expected
+    except OSError as exc:
+        raise PublishError("PUBLISH_FAILED", f"Unable to read existing file: {path}") from exc
+
+
+def write_new_or_match(path: Path, expected: bytes, label: str) -> bool:
+    if path.exists():
+        if existing_matches(path, expected):
+            return False
+        raise PublishError("PUBLISH_FAILED", f"Existing {label} differs: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("wb", dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp", delete=False) as handle:
+            handle.write(expected)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary = Path(handle.name)
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise PublishError("PUBLISH_FAILED", str(exc)) from exc
+    finally:
+        if temporary and temporary.exists():
+            temporary.unlink()
+    return True
+
+
+def write_if_changed(path: Path, content: str) -> bool:
+    expected = content.encode("utf-8")
+    if path.exists() and path.read_bytes() == expected:
+        return False
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("wb", dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp", delete=False) as handle:
+            handle.write(expected)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temporary = Path(handle.name)
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise PublishError("PUBLISH_FAILED", str(exc)) from exc
+    finally:
+        if temporary and temporary.exists():
+            temporary.unlink()
+    return True
 
 
 def source_ref_for(source: Path, project_root: Path) -> str:
@@ -175,65 +243,61 @@ def source_ref_for(source: Path, project_root: Path) -> str:
         raise PublishError("SOURCE_INVALID", "Source must be inside the Horizon repository") from exc
 
 
-def publish_markdown(markdown: str, target_dir: Path, artifact_date: str, source_ref: str) -> str:
+def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, source_ref: str) -> str:
     validate_date(artifact_date)
     expected_source_ref = f"data/summaries/horizon-{artifact_date}-zh.md"
     if source_ref != expected_source_ref:
         raise PublishError("SOURCE_INVALID", f"Expected source {expected_source_ref}, found {source_ref}")
 
-    validate_source_markdown(markdown, artifact_date)
-    converted = convert_to_taiwan(markdown)
-    output = build_output(source_ref, artifact_date, converted)
-    validate_output(output, artifact_date, source_ref)
+    source_text, raw_bytes = normalize_raw_bytes(source_bytes, artifact_date)
+    raw_relative = raw_relative_path(artifact_date)
+    wiki_relative = horizon_wiki_relative_path(artifact_date)
+    raw_path = vault_root / raw_relative
+    wiki_path = vault_root / wiki_relative
+    index_path = vault_root / "wiki" / "index.md"
+    log_path = vault_root / "wiki" / "log.md"
+    index = require_text(index_path, "wiki/index.md")
+    log = require_text(log_path, "wiki/log.md")
+    source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    wiki = horizon_wiki_output(artifact_date, source_ref, raw_relative, source_sha256, raw_sha256, source_text)
+    log_entry = (
+        f"- {artifact_date}：攝取 Horizon `origin/main` 的 `{source_ref}`，原文保存為 "
+        f"[[{wiki_link(raw_relative)}|Horizon {artifact_date} 原始摘要]]，建立 "
+        f"[[{wiki_link(wiki_relative)}]]；原始來源 SHA-256：`{source_sha256}`；"
+        f"Vault 落地 SHA-256：`{raw_sha256}`；僅 CRLF→LF 正規化，可見文字未變。"
+    )
+    updated_index = update_horizon_index(index, artifact_date)
+    updated_log = append_log_entry(log, log_entry)
 
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{artifact_date}-horizon.md"
-    if target.exists() and target.read_text(encoding="utf-8", errors="strict") == output:
-        return "ALREADY_PUBLISHED"
+    if wiki_path.exists() and not existing_matches(wiki_path, wiki.encode("utf-8")):
+        raise PublishError("PUBLISH_FAILED", f"Existing Horizon Wiki differs: {wiki_path}")
 
-    temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", newline="\n", dir=target_dir, prefix=f".{target.stem}-", suffix=".tmp", delete=False
-        ) as handle:
-            handle.write(output)
-            handle.flush()
-            os.fsync(handle.fileno())
-            temporary = Path(handle.name)
-        validate_output(temporary.read_text(encoding="utf-8", errors="strict"), artifact_date, source_ref)
-        os.replace(temporary, target)
-    except PublishError:
-        raise
-    except Exception as exc:
-        raise PublishError("PUBLISH_FAILED", str(exc)) from exc
-    finally:
-        if temporary and temporary.exists():
-            temporary.unlink()
-    return "SUCCESS"
-
-
-def publish_blob(source_bytes: bytes, target_dir: Path, artifact_date: str, source_ref: str) -> str:
-    try:
-        markdown = source_bytes.decode("utf-8", errors="strict")
-    except UnicodeError as exc:
-        raise PublishError("SOURCE_INVALID", "Source is not valid UTF-8") from exc
-    return publish_markdown(markdown, target_dir, artifact_date, source_ref)
+    changed = write_new_or_match(raw_path, raw_bytes, "Raw")
+    changed = write_new_or_match(wiki_path, wiki.encode("utf-8"), "Horizon Wiki") or changed
+    changed = write_if_changed(index_path, updated_index) or changed
+    changed = write_if_changed(log_path, updated_log) or changed
+    return "SUCCESS" if changed else "ALREADY_PUBLISHED"
 
 
-def publish(source_dir: Path, target_dir: Path, artifact_date: str, *, project_root: Path = PROJECT_ROOT) -> str:
+def publish_blob(source_bytes: bytes, vault_root: Path, artifact_date: str, source_ref: str) -> str:
+    return publish_markdown(source_bytes, vault_root, artifact_date, source_ref)
+
+
+def publish(source_dir: Path, vault_root: Path, artifact_date: str, *, project_root: Path = PROJECT_ROOT) -> str:
     source = resolve_source(source_dir, artifact_date)
     try:
-        markdown = source.read_text(encoding="utf-8", errors="strict")
-    except (OSError, UnicodeError) as exc:
+        source_bytes = source.read_bytes()
+    except OSError as exc:
         raise PublishError("SOURCE_INVALID", f"Unable to read source: {source}") from exc
-    return publish_markdown(markdown, target_dir, artifact_date, source_ref_for(source, project_root))
+    return publish_blob(source_bytes, vault_root, artifact_date, source_ref_for(source, project_root))
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publish the canonical daily Horizon artifact.")
     parser.add_argument("--date", default=taipei_today(), help="Asia/Taipei date in YYYY-MM-DD")
     parser.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE_DIR)
-    parser.add_argument("--target-dir", type=Path, default=DEFAULT_TARGET_DIR)
+    parser.add_argument("--vault-root", "--target-dir", dest="vault_root", type=Path, default=DEFAULT_VAULT_ROOT)
     parser.add_argument("--source-file", type=Path, help="Read an authoritative UTF-8 source blob from this file")
     parser.add_argument("--source-ref", help="Repository-relative path for --source-file")
     return parser.parse_args()
@@ -249,9 +313,9 @@ def main() -> int:
                 source_bytes = args.source_file.read_bytes()
             except OSError as exc:
                 raise PublishError("SOURCE_INVALID", f"Unable to read source file: {args.source_file}") from exc
-            status = publish_blob(source_bytes, args.target_dir, args.date, args.source_ref)
+            status = publish_blob(source_bytes, args.vault_root, args.date, args.source_ref)
         else:
-            status = publish(args.source_dir, args.target_dir, args.date)
+            status = publish(args.source_dir, args.vault_root, args.date)
         print(f"STATUS={status}")
         return EXIT_CODES[status]
     except PublishError as exc:

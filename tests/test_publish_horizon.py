@@ -21,6 +21,19 @@ def write_source(source_dir: Path, name: str = f"horizon-{DATE}-zh.md") -> Path:
     return source
 
 
+def write_vault_baseline(vault_root: Path) -> None:
+    wiki_dir = vault_root / "wiki"
+    wiki_dir.mkdir(parents=True)
+    (wiki_dir / "index.md").write_text(
+        "---\ntitle: Wiki 索引\ntype: wiki\nstatus: active\ncreated: 2026-07-01\n---\n\n# Wiki 索引\n\n## 🚀 快速入口\n",
+        encoding="utf-8",
+    )
+    (wiki_dir / "log.md").write_text(
+        "---\ntitle: Wiki 攝取紀錄\ntype: wiki\nstatus: active\ncreated: 2026-07-01\n---\n\n# Wiki 攝取紀錄\n",
+        encoding="utf-8",
+    )
+
+
 def test_resolve_source_uses_chinese_artifact(tmp_path: Path) -> None:
     source_dir = tmp_path / "summaries"
     expected = write_source(source_dir)
@@ -60,61 +73,77 @@ def test_convert_to_taiwan_applies_fixed_terms() -> None:
     assert converted == "軟體 資料 網路 人工智慧 資訊 使用者 影片"
 
 
-def test_publish_writes_required_frontmatter_sections_and_relative_source(tmp_path: Path) -> None:
+def test_publish_writes_raw_wiki_index_and_append_only_log(tmp_path: Path) -> None:
     source_dir = tmp_path / "data" / "summaries"
     write_source(source_dir)
-    target_dir = tmp_path / "vault" / "01_Horizon"
+    vault_root = tmp_path / "vault"
+    write_vault_baseline(vault_root)
 
-    result = publish(source_dir, target_dir, DATE, project_root=tmp_path)
-    target = target_dir / f"{DATE}-horizon.md"
-    output = target.read_text(encoding="utf-8")
+    result = publish(source_dir, vault_root, DATE, project_root=tmp_path)
+    raw = vault_root / "raw" / "2026" / "07" / "11" / f"horizon-{DATE}-zh.md"
+    wiki = vault_root / "wiki" / "Horizon" / f"{DATE} Horizon.md"
+    wiki_output = wiki.read_text(encoding="utf-8")
 
     assert result == "SUCCESS"
-    for field in (
-        f'title: "{DATE} Horizon"',
-        f'date: "{DATE}"',
-        'module: "horizon"',
-        'agent: "Horizon"',
-        'status: "completed"',
-        f'source: "data/summaries/horizon-{DATE}-zh.md"',
-    ):
-        assert field in output
-    for heading in (
-        "Bottom Line",
-        "Signals",
-        "Why It Matters",
-        "Home Impact",
-        "Save / Ignore Decision",
-        "Next Action",
-        "Sources",
-    ):
-        assert f"## {heading}" in output
+    assert raw.read_text(encoding="utf-8") == write_source(source_dir).read_text(encoding="utf-8")
+    assert not raw.read_text(encoding="utf-8").startswith("---")
+    assert f'title: "{DATE} Horizon"' in wiki_output
+    assert "type: wiki" in wiki_output
+    assert "status: active" in wiki_output
+    assert f"created: {DATE}" in wiki_output
+    assert f"[[raw/2026/07/11/horizon-{DATE}-zh]]" in wiki_output
+    assert f"[[wiki/Horizon/{DATE} Horizon|{DATE} Horizon]]" in (vault_root / "wiki" / "index.md").read_text(encoding="utf-8")
+    assert (vault_root / "wiki" / "log.md").read_text(encoding="utf-8").count(f"horizon-{DATE}-zh.md") == 1
 
 
 def test_publish_is_idempotent_and_does_not_change_mtime(tmp_path: Path) -> None:
     source_dir = tmp_path / "data" / "summaries"
     write_source(source_dir)
-    target_dir = tmp_path / "vault" / "01_Horizon"
+    vault_root = tmp_path / "vault"
+    write_vault_baseline(vault_root)
 
-    assert publish(source_dir, target_dir, DATE, project_root=tmp_path) == "SUCCESS"
-    target = target_dir / f"{DATE}-horizon.md"
-    first_mtime = target.stat().st_mtime_ns
-    os.utime(target, ns=(first_mtime, first_mtime))
+    assert publish(source_dir, vault_root, DATE, project_root=tmp_path) == "SUCCESS"
+    raw = vault_root / "raw" / "2026" / "07" / "11" / f"horizon-{DATE}-zh.md"
+    wiki = vault_root / "wiki" / "Horizon" / f"{DATE} Horizon.md"
+    first_raw_mtime = raw.stat().st_mtime_ns
+    first_wiki_mtime = wiki.stat().st_mtime_ns
+    os.utime(raw, ns=(first_raw_mtime, first_raw_mtime))
+    os.utime(wiki, ns=(first_wiki_mtime, first_wiki_mtime))
 
-    assert publish(source_dir, target_dir, DATE, project_root=tmp_path) == "ALREADY_PUBLISHED"
-    assert target.stat().st_mtime_ns == first_mtime
+    assert publish(source_dir, vault_root, DATE, project_root=tmp_path) == "ALREADY_PUBLISHED"
+    assert raw.stat().st_mtime_ns == first_raw_mtime
+    assert wiki.stat().st_mtime_ns == first_wiki_mtime
 
 
-def test_publish_blob_preserves_utf8_chinese_content_through_taiwan_conversion(tmp_path: Path) -> None:
+def test_publish_blob_normalizes_only_crlf_for_raw(tmp_path: Path) -> None:
     source_ref = f"data/summaries/horizon-{DATE}-zh.md"
-    source_body = f"# Horizon 每日快遞 - {DATE}\n\n罕見字：臺灣、😀、軟件。\n"
+    source_body = f"# Horizon 每日快遞 - {DATE}\r\n\r\n罕見字：臺灣、😀、軟件。\r\n"
     source_bytes = source_body.encode("utf-8")
-    target_dir = tmp_path / "vault" / "01_Horizon"
+    vault_root = tmp_path / "vault"
+    write_vault_baseline(vault_root)
 
-    assert publish_blob(source_bytes, target_dir, DATE, source_ref) == "SUCCESS"
+    assert publish_blob(source_bytes, vault_root, DATE, source_ref) == "SUCCESS"
 
-    output = (target_dir / f"{DATE}-horizon.md").read_text(encoding="utf-8")
-    assert "罕見字：臺灣、😀、軟體。" in output
+    raw = vault_root / "raw" / "2026" / "07" / "11" / f"horizon-{DATE}-zh.md"
+    assert raw.read_bytes() == source_body.replace("\r\n", "\n").encode("utf-8")
+
+
+def test_publish_blob_rejects_frontmatter_without_writing_vault(tmp_path: Path) -> None:
+    source_ref = f"data/summaries/horizon-{DATE}-zh.md"
+    source_body = f"---\ntitle: source\n---\n# Horizon 每日快遞 - {DATE}\n"
+    vault_root = tmp_path / "vault"
+    write_vault_baseline(vault_root)
+    index = (vault_root / "wiki" / "index.md").read_text(encoding="utf-8")
+    log = (vault_root / "wiki" / "log.md").read_text(encoding="utf-8")
+
+    with pytest.raises(PublishError, match="SOURCE_INVALID") as error:
+        publish_blob(source_body.encode("utf-8"), vault_root, DATE, source_ref)
+
+    assert error.value.status == "SOURCE_INVALID"
+    assert not (vault_root / "raw").exists()
+    assert not (vault_root / "wiki" / "Horizon").exists()
+    assert (vault_root / "wiki" / "index.md").read_text(encoding="utf-8") == index
+    assert (vault_root / "wiki" / "log.md").read_text(encoding="utf-8") == log
 
 
 def test_invalid_source_does_not_replace_existing_artifact(tmp_path: Path) -> None:
