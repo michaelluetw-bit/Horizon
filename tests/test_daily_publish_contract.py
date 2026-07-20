@@ -109,16 +109,17 @@ def remove_origin_source(tmp_path: Path, project: Path) -> None:
 
 @contextmanager
 def dashboard_server(artifact_date: str) -> Iterator[str]:
+    year, month, day = artifact_date.split("-")
     payload = json.dumps(
         {
             "artifacts": [
                 {
-                    "relativePath": f"01_Horizon\\{artifact_date}-horizon.md",
+                    "relativePath": f"Horizon\\{artifact_date} Horizon.md",
                     "date": artifact_date,
                     "module": "horizon",
                     "agent": "Horizon",
                     "status": "completed",
-                    "source": f"data/summaries/horizon-{artifact_date}-zh.md",
+                    "source": f"raw/{year}/{month}/{day}/horizon-{artifact_date}-zh.md",
                 }
             ]
         }
@@ -163,7 +164,7 @@ def run_sync(project: Path, target: Path, dashboard_base_url: str, tmp_path: Pat
             str(project / "scripts" / "sync_latest.ps1"),
             "-ProjectRoot",
             str(project),
-            "-TargetDir",
+            "-VaultRoot",
             str(target),
             "-DashboardBaseUrl",
             dashboard_base_url,
@@ -181,24 +182,38 @@ def run_sync(project: Path, target: Path, dashboard_base_url: str, tmp_path: Pat
     )
 
 
+def write_vault_baseline(vault_root: Path) -> None:
+    wiki_dir = vault_root / "wiki"
+    wiki_dir.mkdir(parents=True)
+    (wiki_dir / "index.md").write_text(
+        "---\ntitle: Wiki 索引\ntype: wiki\nstatus: active\ncreated: 2026-07-01\n---\n\n# Wiki 索引\n\n## 🚀 快速入口\n",
+        encoding="utf-8",
+    )
+    (wiki_dir / "log.md").write_text(
+        "---\ntitle: Wiki 攝取紀錄\ntype: wiki\nstatus: active\ncreated: 2026-07-01\n---\n\n# Wiki 攝取紀錄\n",
+        encoding="utf-8",
+    )
+
+
 def test_sync_publishes_origin_main_blob_when_worktree_is_clean(tmp_path: Path) -> None:
     source_body = f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式來源：繁體中文。\n"
     project = create_sync_project(tmp_path, source_body)
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
+    write_vault_baseline(target)
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "STATUS=SUCCESS" in result.stdout
-    published = (target / f"{SYNC_DATE}-horizon.md").read_text(encoding="utf-8")
-    assert source_body.strip() in published
+    published = (target / "raw" / "2026" / "07" / "13" / f"horizon-{SYNC_DATE}-zh.md").read_text(encoding="utf-8")
+    assert published == source_body
     assert run_git(["status", "--short"], cwd=project).stdout == ""
 
 
 def test_sync_rejects_invalid_origin_summary(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, "# 不符合 Horizon 契約\n\n內容。\n")
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
@@ -216,7 +231,8 @@ def test_sync_publishes_origin_blob_when_local_generated_summary_is_dirty(tmp_pa
     local_source = project / "data" / "summaries" / f"horizon-{SYNC_DATE}-zh.md"
     local_source.write_text(local_body, encoding="utf-8")
     status_before = run_git(["status", "--short"], cwd=project).stdout
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
+    write_vault_baseline(target)
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
@@ -226,8 +242,8 @@ def test_sync_publishes_origin_blob_when_local_generated_summary_is_dirty(tmp_pa
         ["git", "-C", str(project), "show", f"origin/main:data/summaries/horizon-{SYNC_DATE}-zh.md"]
     )
     assert origin_blob == origin_body.encode("utf-8")
-    published = (target / f"{SYNC_DATE}-horizon.md").read_text(encoding="utf-8")
-    assert "origin/main 正式內容：罕見字：臺灣、😀、軟體。" in published
+    published = (target / "raw" / "2026" / "07" / "13" / f"horizon-{SYNC_DATE}-zh.md").read_text(encoding="utf-8")
+    assert "origin/main 正式內容：罕見字：臺灣、😀、軟件。" in published
     assert local_body.strip() not in published
     assert local_source.read_text(encoding="utf-8") == local_body
     assert run_git(["status", "--short"], cwd=project).stdout == status_before
@@ -238,7 +254,7 @@ def test_sync_rejects_dirty_code_or_configuration(tmp_path: Path, relative_path:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式內容。\n")
     dirty_path = project / relative_path
     dirty_path.write_text("local change\n", encoding="utf-8")
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
@@ -253,7 +269,7 @@ def test_sync_reports_missing_today_origin_output(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n舊本機內容。\n")
     remove_origin_source(tmp_path, project)
     local_source = project / "data" / "summaries" / f"horizon-{SYNC_DATE}-zh.md"
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
@@ -267,11 +283,12 @@ def test_sync_reports_missing_today_origin_output(tmp_path: Path) -> None:
 def test_sync_is_idempotent_for_the_same_origin_blob(tmp_path: Path) -> None:
     source_body = f"# Horizon 每日快遞 - {SYNC_DATE}\n\n同日正式內容。\n"
     project = create_sync_project(tmp_path, source_body)
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
+    write_vault_baseline(target)
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         first = run_sync(project, target, dashboard_base_url, tmp_path)
-        target_file = target / f"{SYNC_DATE}-horizon.md"
+        target_file = target / "raw" / "2026" / "07" / "13" / f"horizon-{SYNC_DATE}-zh.md"
         first_mtime = target_file.stat().st_mtime_ns
         second = run_sync(project, target, dashboard_base_url, tmp_path)
 
@@ -285,7 +302,7 @@ def test_sync_is_idempotent_for_the_same_origin_blob(tmp_path: Path) -> None:
 def test_sync_reports_origin_fetch_failure(tmp_path: Path) -> None:
     project = create_sync_project(tmp_path, f"# Horizon 每日快遞 - {SYNC_DATE}\n\n正式內容。\n")
     run_git(["remote", "set-url", "origin", str(tmp_path / "missing-origin.git")], cwd=project)
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
 
     with dashboard_server(SYNC_DATE) as dashboard_base_url:
         result = run_sync(project, target, dashboard_base_url, tmp_path)
@@ -567,7 +584,7 @@ def test_sync_script_selects_chinese_source_when_bilingual_summaries_exist() -> 
 
 def test_sync_invalid_repository_returns_code_10_without_creating_target(tmp_path: Path) -> None:
     script = ROOT / "scripts/sync_latest.ps1"
-    target = tmp_path / "vault" / "01_Horizon"
+    target = tmp_path / "vault"
     result = subprocess.run(
         [
             "powershell.exe",

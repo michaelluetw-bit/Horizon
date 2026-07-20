@@ -1,6 +1,7 @@
 param(
     [string]$ProjectRoot = "C:\Users\micha\Documents\2026_agent\Horizon",
-    [string]$TargetDir = "C:\Users\micha\Documents\2026_agent\download\knowledge\19_codex\AI Executive Dashboard\01_Horizon",
+    [Alias("TargetDir")]
+    [string]$VaultRoot = "C:\Users\micha\Documents\myvault",
     [string]$DashboardBaseUrl = "http://127.0.0.1:5173",
     [string]$ArtifactDate = "",
     [string]$PythonExecutable = ""
@@ -184,7 +185,7 @@ try {
         "--date", $ArtifactDate,
         "--source-file", $TemporarySource,
         "--source-ref", $sourceRef,
-        "--target-dir", $TargetDir
+        "--vault-root", $VaultRoot
     )
     if ($publishResult.Output) { Write-StructuredLog $publishResult.Output }
     if ($publishResult.ExitCode -ne 0) {
@@ -206,14 +207,16 @@ try {
         Stop-Pipeline "PUBLISH_SUCCESS_DASHBOARD_UNAVAILABLE" 40 $_.Exception.Message
     }
 
-    $expectedRelativePath = "01_Horizon\$ArtifactDate-horizon.md"
+    $dateParts = $ArtifactDate.Split("-")
+    $expectedRelativePath = "Horizon\$ArtifactDate Horizon.md"
+    $expectedSource = "raw/$($dateParts[0])/$($dateParts[1])/$($dateParts[2])/horizon-$ArtifactDate-zh.md"
     $artifact = $payload.artifacts | Where-Object {
         $_.relativePath -eq $expectedRelativePath -and
         $_.date -eq $ArtifactDate -and
         $_.module -eq "horizon" -and
         $_.agent -eq "Horizon" -and
         $_.status -eq "completed" -and
-        $_.source -eq $sourceRef
+        $_.source -eq $expectedSource
     } | Select-Object -First 1
     if (-not $artifact) {
         Stop-Pipeline "DASHBOARD_VALIDATION_FAILED" 41 "Dashboard did not return the canonical published artifact."
