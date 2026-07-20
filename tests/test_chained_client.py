@@ -142,6 +142,13 @@ def test_should_fallback_detects_retryable_errors():
     assert ChainedAIClient._should_fallback(Exception("some random error")) is False
 
 
+def test_should_fallback_detects_network_failures():
+    """Connection errors and timeouts should also trigger fallback."""
+    assert ChainedAIClient._should_fallback(Exception("Connection error.")) is True
+    assert ChainedAIClient._should_fallback(Exception("Request timed out.")) is True
+    assert ChainedAIClient._should_fallback(Exception("connect timeout")) is True
+
+
 def test_lazy_initialization():
     """Downstream clients are not instantiated when the first provider succeeds."""
     cfg1 = _make_config(AIProvider.OPENAI)
@@ -172,6 +179,43 @@ def test_create_chained_client_parses_chain():
     assert chained.configs[1].provider == AIProvider.OLLAMA
     assert chained.configs[1].model == "llama3.1"
     assert chained.configs[1].api_key_env == ""
+
+
+def test_create_chained_client_keeps_user_settings_for_configured_provider_only():
+    """model/api_key_env/base_url apply to the configured provider, not the whole chain."""
+    config = AIConfig(
+        provider=AIProvider.OPENAI,
+        model="my-custom-model",
+        api_key_env="MY_KEY",
+        base_url="https://proxy.example/v1",
+        provider_chain="openai,deepseek",
+    )
+    chained = _create_chained_client(config)
+
+    assert chained.configs[0].model == "my-custom-model"
+    assert chained.configs[0].api_key_env == "MY_KEY"
+    assert chained.configs[0].base_url == "https://proxy.example/v1"
+    # The fallback provider must use its own defaults, not the primary's.
+    assert chained.configs[1].model == "deepseek-chat"
+    assert chained.configs[1].api_key_env == "DEEPSEEK_API_KEY"
+    assert chained.configs[1].base_url is None
+
+
+def test_chained_client_exposes_primary_config():
+    """Callers read throttle/concurrency/languages via client.config."""
+    config = AIConfig(
+        provider=AIProvider.OPENAI,
+        model="m1",
+        api_key_env="K1",
+        provider_chain="openai,ollama",
+        throttle_sec=1.5,
+        languages=["zh", "en"],
+    )
+    chained = _create_chained_client(config)
+
+    assert chained.config is chained.configs[0]
+    assert chained.config.throttle_sec == 1.5
+    assert chained.config.languages == ["zh", "en"]
 
 
 def test_create_chained_client_rejects_unknown_provider():
