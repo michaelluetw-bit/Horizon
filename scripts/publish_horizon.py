@@ -145,9 +145,9 @@ sources:
 > [!info] 原始來源
 > - Horizon `origin/main`：`{source_ref}`
 > - Vault 原文：[[{raw_link}|Horizon {artifact_date} 原始摘要]]
-> - 原始來源 SHA-256：`{source_sha256}`
+> - 攝取時記錄的來源 SHA-256：`{source_sha256}`
 > - Vault 落地 SHA-256：`{raw_sha256}`
-> - 正規化：僅將 CRLF 轉為 LF；可見文字未變。
+> - 正規化：未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回。
 
 ## Bottom Line
 
