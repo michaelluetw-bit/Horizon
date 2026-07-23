@@ -66,3 +66,4 @@ todo.txt
 
 # Cloudflare Watchdog local dependencies
 workers/horizon-watchdog/node_modules/
+workers/horizon-watchdog/.wrangler/
