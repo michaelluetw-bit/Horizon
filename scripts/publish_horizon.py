@@ -125,6 +125,7 @@ def horizon_wiki_output(
     source_sha256: str,
     raw_sha256: str,
     raw_text: str,
+    normalization_note: str,
 ) -> str:
     heading = f"# Horizon 每日快遞 - {artifact_date}"
     content = raw_text.replace("\r\n", "\n")
@@ -147,7 +148,7 @@ sources:
 > - Vault 原文：[[{raw_link}|Horizon {artifact_date} 原始摘要]]
 > - 攝取時記錄的來源 SHA-256：`{source_sha256}`
 > - Vault 落地 SHA-256：`{raw_sha256}`
-> - 正規化：未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回。
+> - 正規化：{normalization_note}。
 
 ## Bottom Line
 
@@ -250,6 +251,10 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
         raise PublishError("SOURCE_INVALID", f"Expected source {expected_source_ref}, found {source_ref}")
 
     source_text, raw_bytes = normalize_raw_bytes(source_bytes, artifact_date)
+    if raw_bytes == source_bytes:
+        normalization_note = "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同"
+    else:
+        normalization_note = "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同"
     raw_relative = raw_relative_path(artifact_date)
     wiki_relative = horizon_wiki_relative_path(artifact_date)
     raw_path = vault_root / raw_relative
@@ -260,12 +265,12 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
     log = require_text(log_path, "wiki/log.md")
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
-    wiki = horizon_wiki_output(artifact_date, source_ref, raw_relative, source_sha256, raw_sha256, source_text)
+    wiki = horizon_wiki_output(artifact_date, source_ref, raw_relative, source_sha256, raw_sha256, source_text, normalization_note)
     log_entry = (
         f"- {artifact_date}：攝取 Horizon `origin/main` 的 `{source_ref}`，原文保存為 "
         f"[[{wiki_link(raw_relative)}|Horizon {artifact_date} 原始摘要]]，建立 "
         f"[[{wiki_link(wiki_relative)}]]；原始來源 SHA-256：`{source_sha256}`；"
-        f"Vault 落地 SHA-256：`{raw_sha256}`；僅 CRLF→LF 正規化，可見文字未變。"
+        f"Vault 落地 SHA-256：`{raw_sha256}`；{normalization_note}。"
     )
     updated_index = update_horizon_index(index, artifact_date)
     updated_log = append_log_entry(log, log_entry)
