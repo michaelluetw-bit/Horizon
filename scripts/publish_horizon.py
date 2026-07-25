@@ -45,7 +45,12 @@ TAIWAN_TERMS = (
     ("用戶", "使用者"),
     ("視頻", "影片"),
 )
-LEGACY_NORMALIZATION_NOTE = "僅將 CRLF 轉為 LF；可見文字未變"
+SOURCE_SHA256_LABEL = "攝取時記錄的來源 SHA-256"
+LEGACY_PROVENANCE_FORMATS = (
+    (SOURCE_SHA256_LABEL, "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回"),
+    ("原始來源 SHA-256", "僅將 CRLF 轉為 LF；可見文字未變"),
+)
+LEGACY_LOG_NORMALIZATION_NOTE = "僅 CRLF→LF 正規化，可見文字未變"
 
 
 class PublishError(RuntimeError):
@@ -144,6 +149,8 @@ def horizon_wiki_output(
     raw_sha256: str,
     raw_text: str,
     normalization_note: str,
+    *,
+    source_sha256_label: str = SOURCE_SHA256_LABEL,
 ) -> str:
     heading = f"# Horizon 每日快遞 - {artifact_date}"
     content = raw_text.replace("\r\n", "\n")
@@ -164,7 +171,7 @@ sources:
 > [!info] 原始來源
 > - Horizon `origin/main`：`{source_ref}`
 > - Vault 原文：[[{raw_link}|Horizon {artifact_date} 原始摘要]]
-> - 攝取時記錄的來源 SHA-256：`{source_sha256}`
+> - {source_sha256_label}：`{source_sha256}`
 > - Vault 落地 SHA-256：`{raw_sha256}`
 > - 正規化：{normalization_note}。
 
@@ -310,15 +317,6 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
     updated_index = update_horizon_index(index, artifact_date)
     updated_log = append_log_entry(log, log_entry)
 
-    legacy_wiki = horizon_wiki_output(
-        artifact_date,
-        source_ref,
-        raw_relative,
-        source_sha256,
-        raw_sha256,
-        source_text,
-        LEGACY_NORMALIZATION_NOTE,
-    )
     legacy_log_entry = horizon_log_entry(
         artifact_date,
         source_ref,
@@ -326,15 +324,26 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
         wiki_relative,
         source_sha256,
         raw_sha256,
-        LEGACY_NORMALIZATION_NOTE,
+        LEGACY_LOG_NORMALIZATION_NOTE,
     )
-    if (
-        existing_matches(raw_path, raw_bytes)
-        and existing_matches(wiki_path, legacy_wiki.encode("utf-8"))
-        and updated_index == index
-        and append_log_entry(log, legacy_log_entry) == log
-    ):
-        return "ALREADY_PUBLISHED"
+    for legacy_source_sha256_label, legacy_normalization_note in LEGACY_PROVENANCE_FORMATS:
+        legacy_wiki = horizon_wiki_output(
+            artifact_date,
+            source_ref,
+            raw_relative,
+            source_sha256,
+            raw_sha256,
+            source_text,
+            legacy_normalization_note,
+            source_sha256_label=legacy_source_sha256_label,
+        )
+        if (
+            existing_matches(raw_path, raw_bytes)
+            and existing_matches(wiki_path, legacy_wiki.encode("utf-8"))
+            and updated_index == index
+            and append_log_entry(log, legacy_log_entry) == log
+        ):
+            return "ALREADY_PUBLISHED"
 
     if wiki_path.exists() and not existing_matches(wiki_path, wiki.encode("utf-8")):
         raise PublishError("PUBLISH_FAILED", f"Existing Horizon Wiki differs: {wiki_path}")

@@ -220,7 +220,21 @@ def test_publish_blob_reports_actual_line_endings(
     assert f"> - 正規化：{expected_note}。" in wiki.read_text(encoding="utf-8")
 
 
-def test_publish_blob_accepts_previous_provenance_format_as_already_published(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("source_sha256_label", "wiki_normalization_note"),
+    [
+        (
+            "攝取時記錄的來源 SHA-256",
+            "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回",
+        ),
+        ("原始來源 SHA-256", "僅將 CRLF 轉為 LF；可見文字未變"),
+    ],
+)
+def test_publish_blob_accepts_actual_pre_pr40_provenance_formats_as_already_published(
+    tmp_path: Path,
+    source_sha256_label: str,
+    wiki_normalization_note: str,
+) -> None:
     source_ref = f"data/summaries/horizon-{DATE}-zh.md"
     source_body = f"# Horizon 每日快遞 - {DATE}\r\n\r\n摘要。\r\n"
     source_bytes = source_body.encode("utf-8")
@@ -236,7 +250,7 @@ def test_publish_blob_accepts_previous_provenance_format_as_already_published(tm
     wiki_path = vault_root / wiki_relative
     raw_path.parent.mkdir(parents=True)
     raw_path.write_bytes(raw_bytes)
-    legacy_note = "僅將 CRLF 轉為 LF；可見文字未變"
+    legacy_log_note = "僅 CRLF→LF 正規化，可見文字未變"
     legacy_wiki = horizon_wiki_output(
         DATE,
         source_ref,
@@ -244,7 +258,8 @@ def test_publish_blob_accepts_previous_provenance_format_as_already_published(tm
         source_sha256,
         raw_sha256,
         source_body,
-        legacy_note,
+        wiki_normalization_note,
+        source_sha256_label=source_sha256_label,
     )
     wiki_path.parent.mkdir(parents=True)
     wiki_path.write_bytes(legacy_wiki.encode("utf-8"))
@@ -257,7 +272,7 @@ def test_publish_blob_accepts_previous_provenance_format_as_already_published(tm
     legacy_log_entry = (
         f"- {DATE}：攝取 Horizon `origin/main` 的 `{source_ref}`，原文保存為 "
         f"[[{raw_link}|Horizon {DATE} 原始摘要]]，建立 [[{wiki_link}]]；"
-        f"原始來源 SHA-256：`{source_sha256}`；Vault 落地 SHA-256：`{raw_sha256}`；{legacy_note}。"
+        f"原始來源 SHA-256：`{source_sha256}`；Vault 落地 SHA-256：`{raw_sha256}`；{legacy_log_note}。"
     )
     log_path.write_text(append_log_entry(log_path.read_text(encoding="utf-8"), legacy_log_entry), encoding="utf-8")
     original_raw = raw_path.read_bytes()
