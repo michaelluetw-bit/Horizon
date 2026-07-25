@@ -45,6 +45,12 @@ TAIWAN_TERMS = (
     ("用戶", "使用者"),
     ("視頻", "影片"),
 )
+SOURCE_SHA256_LABEL = "攝取時記錄的來源 SHA-256"
+LEGACY_PROVENANCE_FORMATS = (
+    (SOURCE_SHA256_LABEL, "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回"),
+    ("原始來源 SHA-256", "僅將 CRLF 轉為 LF；可見文字未變"),
+)
+LEGACY_LOG_NORMALIZATION_NOTE = "僅 CRLF→LF 正規化，可見文字未變"
 
 
 class PublishError(RuntimeError):
@@ -105,6 +111,23 @@ def normalize_raw_bytes(source_bytes: bytes, artifact_date: str) -> tuple[str, b
     return source_text, source_text.replace("\r\n", "\n").encode("utf-8")
 
 
+def normalization_note_for(source_bytes: bytes) -> str:
+    crlf_count = source_bytes.count(b"\r\n")
+    bare_cr_count = source_bytes.replace(b"\r\n", b"").count(b"\r")
+    if bare_cr_count:
+        if crlf_count:
+            return (
+                f"已將 {crlf_count} 個 CRLF 轉為 LF；來源另含 {bare_cr_count} 個單獨 CR，"
+                "Vault Raw 保留該位元組"
+            )
+        return f"來源包含 {bare_cr_count} 個單獨 CR；本流程僅正規化 CRLF，Vault Raw 保留該位元組"
+    if crlf_count:
+        return f"已將 {crlf_count} 個 CRLF 轉為 LF；來源與 Vault 落地 SHA-256 不同"
+    if b"\n" in source_bytes:
+        return "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同"
+    return "來源未含換行字元；未發生換行轉換；來源與 Vault 落地 SHA-256 相同"
+
+
 def raw_relative_path(artifact_date: str) -> Path:
     year, month, day = artifact_date.split("-")
     return Path("raw") / year / month / day / f"horizon-{artifact_date}-zh.md"
@@ -126,6 +149,8 @@ def horizon_wiki_output(
     raw_sha256: str,
     raw_text: str,
     normalization_note: str,
+    *,
+    source_sha256_label: str = SOURCE_SHA256_LABEL,
 ) -> str:
     heading = f"# Horizon 每日快遞 - {artifact_date}"
     content = raw_text.replace("\r\n", "\n")
@@ -146,7 +171,7 @@ sources:
 > [!info] 原始來源
 > - Horizon `origin/main`：`{source_ref}`
 > - Vault 原文：[[{raw_link}|Horizon {artifact_date} 原始摘要]]
-> - 攝取時記錄的來源 SHA-256：`{source_sha256}`
+> - {source_sha256_label}：`{source_sha256}`
 > - Vault 落地 SHA-256：`{raw_sha256}`
 > - 正規化：{normalization_note}。
 
@@ -158,6 +183,23 @@ Horizon {artifact_date} 原始摘要已攝取；內容與來源可由下方 Wiki
 
 {content.rstrip()}
 '''
+
+
+def horizon_log_entry(
+    artifact_date: str,
+    source_ref: str,
+    raw_relative: Path,
+    wiki_relative: Path,
+    source_sha256: str,
+    raw_sha256: str,
+    normalization_note: str,
+) -> str:
+    return (
+        f"- {artifact_date}：攝取 Horizon `origin/main` 的 `{source_ref}`，原文保存為 "
+        f"[[{wiki_link(raw_relative)}|Horizon {artifact_date} 原始摘要]]，建立 "
+        f"[[{wiki_link(wiki_relative)}]]；原始來源 SHA-256：`{source_sha256}`；"
+        f"Vault 落地 SHA-256：`{raw_sha256}`；{normalization_note}。"
+    )
 
 
 def require_text(path: Path, label: str) -> str:
@@ -251,10 +293,7 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
         raise PublishError("SOURCE_INVALID", f"Expected source {expected_source_ref}, found {source_ref}")
 
     source_text, raw_bytes = normalize_raw_bytes(source_bytes, artifact_date)
-    if raw_bytes == source_bytes:
-        normalization_note = "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同"
-    else:
-        normalization_note = "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同"
+    normalization_note = normalization_note_for(source_bytes)
     raw_relative = raw_relative_path(artifact_date)
     wiki_relative = horizon_wiki_relative_path(artifact_date)
     raw_path = vault_root / raw_relative
@@ -266,14 +305,45 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
     raw_sha256 = hashlib.sha256(raw_bytes).hexdigest()
     wiki = horizon_wiki_output(artifact_date, source_ref, raw_relative, source_sha256, raw_sha256, source_text, normalization_note)
-    log_entry = (
-        f"- {artifact_date}：攝取 Horizon `origin/main` 的 `{source_ref}`，原文保存為 "
-        f"[[{wiki_link(raw_relative)}|Horizon {artifact_date} 原始摘要]]，建立 "
-        f"[[{wiki_link(wiki_relative)}]]；原始來源 SHA-256：`{source_sha256}`；"
-        f"Vault 落地 SHA-256：`{raw_sha256}`；{normalization_note}。"
+    log_entry = horizon_log_entry(
+        artifact_date,
+        source_ref,
+        raw_relative,
+        wiki_relative,
+        source_sha256,
+        raw_sha256,
+        normalization_note,
     )
     updated_index = update_horizon_index(index, artifact_date)
     updated_log = append_log_entry(log, log_entry)
+
+    legacy_log_entry = horizon_log_entry(
+        artifact_date,
+        source_ref,
+        raw_relative,
+        wiki_relative,
+        source_sha256,
+        raw_sha256,
+        LEGACY_LOG_NORMALIZATION_NOTE,
+    )
+    for legacy_source_sha256_label, legacy_normalization_note in LEGACY_PROVENANCE_FORMATS:
+        legacy_wiki = horizon_wiki_output(
+            artifact_date,
+            source_ref,
+            raw_relative,
+            source_sha256,
+            raw_sha256,
+            source_text,
+            legacy_normalization_note,
+            source_sha256_label=legacy_source_sha256_label,
+        )
+        if (
+            existing_matches(raw_path, raw_bytes)
+            and existing_matches(wiki_path, legacy_wiki.encode("utf-8"))
+            and updated_index == index
+            and append_log_entry(log, legacy_log_entry) == log
+        ):
+            return "ALREADY_PUBLISHED"
 
     if wiki_path.exists() and not existing_matches(wiki_path, wiki.encode("utf-8")):
         raise PublishError("PUBLISH_FAILED", f"Existing Horizon Wiki differs: {wiki_path}")
