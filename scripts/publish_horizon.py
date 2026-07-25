@@ -47,10 +47,27 @@ TAIWAN_TERMS = (
 )
 SOURCE_SHA256_LABEL = "攝取時記錄的來源 SHA-256"
 LEGACY_PROVENANCE_FORMATS = (
-    (SOURCE_SHA256_LABEL, "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回"),
-    ("原始來源 SHA-256", "僅將 CRLF 轉為 LF；可見文字未變"),
+    (
+        SOURCE_SHA256_LABEL,
+        "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同",
+        "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同",
+    ),
+    (
+        SOURCE_SHA256_LABEL,
+        "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同",
+        "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同",
+    ),
+    (
+        SOURCE_SHA256_LABEL,
+        "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回",
+        "僅 CRLF→LF 正規化，可見文字未變",
+    ),
+    (
+        "原始來源 SHA-256",
+        "僅將 CRLF 轉為 LF；可見文字未變",
+        "僅 CRLF→LF 正規化，可見文字未變",
+    ),
 )
-LEGACY_LOG_NORMALIZATION_NOTE = "僅 CRLF→LF 正規化，可見文字未變"
 
 
 class PublishError(RuntimeError):
@@ -317,16 +334,11 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
     updated_index = update_horizon_index(index, artifact_date)
     updated_log = append_log_entry(log, log_entry)
 
-    legacy_log_entry = horizon_log_entry(
-        artifact_date,
-        source_ref,
-        raw_relative,
-        wiki_relative,
-        source_sha256,
-        raw_sha256,
-        LEGACY_LOG_NORMALIZATION_NOTE,
-    )
-    for legacy_source_sha256_label, legacy_normalization_note in LEGACY_PROVENANCE_FORMATS:
+    for (
+        legacy_source_sha256_label,
+        legacy_normalization_note,
+        legacy_log_normalization_note,
+    ) in LEGACY_PROVENANCE_FORMATS:
         legacy_wiki = horizon_wiki_output(
             artifact_date,
             source_ref,
@@ -336,6 +348,15 @@ def publish_markdown(source_bytes: bytes, vault_root: Path, artifact_date: str, 
             source_text,
             legacy_normalization_note,
             source_sha256_label=legacy_source_sha256_label,
+        )
+        legacy_log_entry = horizon_log_entry(
+            artifact_date,
+            source_ref,
+            raw_relative,
+            wiki_relative,
+            source_sha256,
+            raw_sha256,
+            legacy_log_normalization_note,
         )
         if (
             existing_matches(raw_path, raw_bytes)
