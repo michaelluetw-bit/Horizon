@@ -221,22 +221,42 @@ def test_publish_blob_reports_actual_line_endings(
 
 
 @pytest.mark.parametrize(
-    ("source_sha256_label", "wiki_normalization_note"),
+    ("source_body", "source_sha256_label", "wiki_normalization_note", "legacy_log_note"),
     [
         (
+            f"# Horizon 每日快遞 - {DATE}\r\n\r\n摘要。\r\n",
             "攝取時記錄的來源 SHA-256",
             "未驗證；原始來源檔目前不可取得，先前的 CRLF→LF 說法已撤回",
+            "僅 CRLF→LF 正規化，可見文字未變",
         ),
-        ("原始來源 SHA-256", "僅將 CRLF 轉為 LF；可見文字未變"),
+        (
+            f"# Horizon 每日快遞 - {DATE}\r\n\r\n摘要。\r\n",
+            "原始來源 SHA-256",
+            "僅將 CRLF 轉為 LF；可見文字未變",
+            "僅 CRLF→LF 正規化，可見文字未變",
+        ),
+        (
+            f"# Horizon 每日快遞 - {DATE}\r\n\r\n摘要。\r\n",
+            "攝取時記錄的來源 SHA-256",
+            "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同",
+            "已執行 CRLF→LF 正規化；來源與 Vault 落地 SHA-256 不同",
+        ),
+        (
+            f"# Horizon 每日快遞 - {DATE}\r\r摘要。\r",
+            "攝取時記錄的來源 SHA-256",
+            "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同",
+            "來源已為 LF，未發生換行轉換；來源與 Vault 落地 SHA-256 相同",
+        ),
     ],
 )
-def test_publish_blob_accepts_actual_pre_pr40_provenance_formats_as_already_published(
+def test_publish_blob_accepts_actual_historical_provenance_formats_as_already_published(
     tmp_path: Path,
+    source_body: str,
     source_sha256_label: str,
     wiki_normalization_note: str,
+    legacy_log_note: str,
 ) -> None:
     source_ref = f"data/summaries/horizon-{DATE}-zh.md"
-    source_body = f"# Horizon 每日快遞 - {DATE}\r\n\r\n摘要。\r\n"
     source_bytes = source_body.encode("utf-8")
     raw_bytes = source_body.replace("\r\n", "\n").encode("utf-8")
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -250,7 +270,6 @@ def test_publish_blob_accepts_actual_pre_pr40_provenance_formats_as_already_publ
     wiki_path = vault_root / wiki_relative
     raw_path.parent.mkdir(parents=True)
     raw_path.write_bytes(raw_bytes)
-    legacy_log_note = "僅 CRLF→LF 正規化，可見文字未變"
     legacy_wiki = horizon_wiki_output(
         DATE,
         source_ref,
