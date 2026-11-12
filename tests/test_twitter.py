@@ -708,7 +708,8 @@ def test_poll_wall_clock_budget_cancels_a_blocked_request(monkeypatch):
             scraper._wait_for_run("synthetic-token", "synthetic-run"), timeout=0.5,
         )
         assert result is False
-        assert cancelled == [True]
+        assert cancelled
+        assert len(cancelled) == scraper.client.get.call_count
 
     asyncio.run(run())
 
