@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import smtplib
+import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import parseaddr
@@ -16,6 +17,8 @@ try:
     import markdown
 except ImportError:
     markdown = None
+
+from rich.console import Console
 
 from ..ai.markdown_utils import clean_app_summary_markdown
 from ..models import EmailConfig
@@ -48,20 +51,7 @@ class EmailManager:
     def __init__(self, config: EmailConfig, console=None):
         self.config = config
         self.pwd = os.getenv(self.config.password_env)
-        if console is None:
-            try:
-                from rich.console import Console
-
-                self.console = Console()
-            except ImportError:
-
-                class DummyConsole:
-                    def print(self, *args, **kwargs):
-                        print(*args, **kwargs)
-
-                self.console = DummyConsole()
-        else:
-            self.console = console
+        self.console = console if console is not None else Console(stderr=True)
 
         if not self.pwd and self.config.enabled:
             logger.warning(
@@ -123,31 +113,43 @@ class EmailManager:
 
     @staticmethod
     def _collect_request_senders(mail, keyword: str) -> List[str]:
-        """Return validated sender addresses of unseen mails whose subject equals *keyword*."""
+        """Return validated sender addresses for matching subscription requests."""
         safe_keyword = keyword.replace("\\", "\\\\").replace('"', '\\"')
         status, messages = mail.search(None, f'(UNSEEN SUBJECT "{safe_keyword}")')
         if status != "OK" or not messages[0]:
             return []
 
         addresses: List[str] = []
-        for e_id in messages[0].split():
-            _, msg_data = mail.fetch(e_id, "(RFC822)")
-            for response_part in msg_data:
-                if not isinstance(response_part, tuple):
+        for message_id in messages[0].split():
+            _, message_data = mail.fetch(message_id, "(RFC822)")
+            for part in message_data:
+                if not isinstance(part, tuple):
                     continue
-                msg = email.message_from_bytes(response_part[1])
-
-                subject = str(msg.get("Subject") or "").strip()
-                if subject.upper() != keyword.upper():
+                message = email.message_from_bytes(part[1])
+                if str(message.get("Subject") or "").strip().upper() != keyword.upper():
                     continue
-
-                sender = msg.get("From")
-                if not sender:
-                    continue
-                _, email_addr = parseaddr(sender)
-                if email_addr and _is_valid_subscriber_email(email_addr):
-                    addresses.append(email_addr)
+                _, address = parseaddr(message.get("From") or "")
+                if address and _is_valid_subscriber_email(address):
+                    addresses.append(address)
         return addresses
+
+    def _open_smtp(self) -> smtplib.SMTP:
+        """Open an implicit TLS or STARTTLS SMTP connection."""
+        context = ssl.create_default_context()
+        if self.config.smtp_port == 465:
+            return smtplib.SMTP_SSL(
+                self.config.smtp_server, self.config.smtp_port, context=context
+            )
+
+        server = smtplib.SMTP(self.config.smtp_server, self.config.smtp_port)
+        try:
+            server.ehlo()
+            server.starttls(context=context)
+            server.ehlo()
+        except Exception:
+            server.close()
+            raise
+        return server
 
     def send_daily_summary(self, summary_md: str, subject: str, subscribers: List[str]):
         """Sends the daily summary to all subscribers."""
@@ -191,9 +193,7 @@ class EmailManager:
         """
 
         try:
-            with smtplib.SMTP_SSL(
-                self.config.smtp_server, self.config.smtp_port
-            ) as server:
+            with self._open_smtp() as server:
                 server.login(
                     self.config.smtp_username or self.config.email_address, self.pwd
                 )
@@ -224,9 +224,7 @@ class EmailManager:
     def _send_reply(self, to_email: str, subject: str, body: str):
         """Helper to send a simple reply."""
         try:
-            with smtplib.SMTP_SSL(
-                self.config.smtp_server, self.config.smtp_port
-            ) as server:
+            with self._open_smtp() as server:
                 server.login(
                     self.config.smtp_username or self.config.email_address, self.pwd
                 )

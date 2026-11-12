@@ -2,8 +2,9 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, HttpUrl, Field, field_validator
+import re
+from typing import Annotated, Literal, Optional, List, Dict, Any, NamedTuple, Union
+from pydantic import BaseModel, ConfigDict, HttpUrl, Field, field_validator, model_validator
 
 
 class SourceType(str, Enum):
@@ -14,14 +15,95 @@ class SourceType(str, Enum):
     RSS = "rss"
     REDDIT = "reddit"
     TELEGRAM = "telegram"
+    TWITTER = "twitter"
     OPENBB = "openbb"
     OSSINSIGHT = "ossinsight"
     GDELT = "gdelt"
     GOOGLE_NEWS = "google_news"
 
 
+class SourceDefinition(NamedTuple):
+    """How a top-level source is represented in SourcesConfig."""
+
+    config_field: str
+    config_is_list: bool = False
+    item_fields: tuple[str, ...] = ()
+
+
+SOURCE_REGISTRY = {
+    SourceType.GITHUB.value: SourceDefinition("github", config_is_list=True),
+    SourceType.HACKERNEWS.value: SourceDefinition("hackernews"),
+    SourceType.RSS.value: SourceDefinition("rss", config_is_list=True),
+    SourceType.REDDIT.value: SourceDefinition("reddit", item_fields=("subreddits", "users")),
+    SourceType.TELEGRAM.value: SourceDefinition("telegram", item_fields=("channels",)),
+    SourceType.TWITTER.value: SourceDefinition("twitter", item_fields=("users", "keywords")),
+    SourceType.OPENBB.value: SourceDefinition("openbb", item_fields=("watchlists",)),
+    SourceType.OSSINSIGHT.value: SourceDefinition("ossinsight"),
+    SourceType.GDELT.value: SourceDefinition("gdelt"),
+    SourceType.GOOGLE_NEWS.value: SourceDefinition("google_news"),
+}
+
+ProfileRoute = Optional[Union[str, List[str]]]
+
+
+class ClassificationResult(BaseModel):
+    """Resolved processing profile for a content item."""
+
+    profile: str
+    method: Literal["source_override", "ai_match"]
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    reason: Optional[str] = None
+
+
+class ContentAnalysis(BaseModel):
+    """Profile-driven first-pass analysis."""
+
+    score: Optional[float] = Field(default=None, ge=0, le=10, allow_inf_nan=False)
+    reason: str
+    summary: str
+    tags: List[str] = Field(default_factory=list)
+
+
+class ArtifactSource(BaseModel):
+    """External source used while producing an artifact."""
+
+    id: str
+    title: str
+    url: str
+
+
+class ContentBlock(BaseModel):
+    """A renderable section produced by an enrichment profile."""
+
+    id: str
+    type: Literal["section"] = "section"
+    title: str
+    content: str
+    source_refs: List[str] = Field(default_factory=list)
+    primary: bool = False
+
+
+class ContentArtifact(BaseModel):
+    """Localized, profile-defined enriched content."""
+
+    language: str
+    title: str
+    blocks: List[ContentBlock] = Field(default_factory=list)
+    sources: List[ArtifactSource] = Field(default_factory=list)
+
+
+class ProcessingResult(BaseModel):
+    """All AI processing state for a content item."""
+
+    classification: ClassificationResult
+    analysis: Optional[ContentAnalysis] = None
+    artifacts: Dict[str, ContentArtifact] = Field(default_factory=dict)
+
+
 class ContentItem(BaseModel):
     """Unified content item model from any source."""
+
+    model_config = ConfigDict(extra="forbid")
 
     id: str  # Format: {source}:{subtype}:{native_id}
     source_type: SourceType
@@ -32,12 +114,8 @@ class ContentItem(BaseModel):
     published_at: datetime
     fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: Dict[str, Any] = Field(default_factory=dict)
-
-    # AI analysis results
-    ai_score: Optional[float] = None  # 0-10 importance score
-    ai_reason: Optional[str] = None
-    ai_summary: Optional[str] = None
-    ai_tags: List[str] = Field(default_factory=list)
+    profile: ProfileRoute = None
+    processing: Optional[ProcessingResult] = None
 
 
 class AIProvider(str, Enum):
@@ -45,6 +123,7 @@ class AIProvider(str, Enum):
 
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
+    OPENAI_CHATGPT = "openai-chatgpt"
     AZURE = "azure"
     ALI = "ali"
     GEMINI = "gemini"
@@ -54,43 +133,59 @@ class AIProvider(str, Enum):
     OLLAMA = "ollama"
 
 
-# Default models and API key env vars for each provider
+# Provider-specific defaults used by setup and provider-chain expansion.
 AI_PROVIDER_DEFAULTS = {
     AIProvider.ANTHROPIC: {
-        "model": "claude-3-5-sonnet-20241022",
+        "model": "claude-sonnet-5-5",
         "api_key_env": "ANTHROPIC_API_KEY",
+        "base_url": None,
     },
     AIProvider.OPENAI: {
         "model": "gpt-4",
         "api_key_env": "OPENAI_API_KEY",
+        "base_url": None,
+    },
+    AIProvider.OPENAI_CHATGPT: {
+        "model": "",  # Selected from the signed-in account's model catalog.
+        "api_key_env": "",
+        "base_url": None,
     },
     AIProvider.AZURE: {
         "model": "gpt-4",
         "api_key_env": "AZURE_OPENAI_API_KEY",
+        "base_url": None,
+        "azure_endpoint_env": "AZURE_OPENAI_ENDPOINT",
+        "api_version": "2024-10-21",
     },
     AIProvider.ALI: {
         "model": "qwen-plus",
         "api_key_env": "DASHSCOPE_API_KEY",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     },
     AIProvider.GEMINI: {
         "model": "gemini-1.5-flash",
         "api_key_env": "GOOGLE_API_KEY",
+        "base_url": None,
     },
     AIProvider.DOUBAO: {
         "model": "doubao-pro-32k",
         "api_key_env": "DOUBAO_API_KEY",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
     },
     AIProvider.MINIMAX: {
-        "model": "MiniMax-Text-01",
+        "model": "MiniMax-M3.1-Flash",
         "api_key_env": "MINIMAX_API_KEY",
+        "base_url": "https://api.minimax.io/v1",
     },
     AIProvider.DEEPSEEK: {
         "model": "deepseek-chat",
         "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com",
     },
     AIProvider.OLLAMA: {
         "model": "llama3.1",
         "api_key_env": "",
+        "base_url": "http://localhost:11434/v1",
     },
 }
 
@@ -103,6 +198,8 @@ class AIConfig(BaseModel):
     model: str
     base_url: Optional[str] = None
     api_key_env: str
+    chatgpt_account: Optional[str] = None
+    extra_body: Optional[Dict[str, Any]] = None
     temperature: float = 0.3
     max_tokens: int = 4096
     throttle_sec: float = 0.0
@@ -112,6 +209,43 @@ class AIConfig(BaseModel):
     # Azure OpenAI specific; required when provider == AZURE
     azure_endpoint_env: Optional[str] = None
     api_version: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_chatgpt_credentials(cls, value: Any) -> Any:
+        if isinstance(value, dict) and value.get("provider") == AIProvider.OPENAI_CHATGPT:
+            value = dict(value)
+            value.setdefault("api_key_env", "")
+        return value
+
+    @model_validator(mode="after")
+    def validate_chatgpt_settings(self) -> "AIConfig":
+        chain = [name.strip() for name in (self.provider_chain or "").split(",")]
+        if "openai-chatgpt" in chain and self.provider != AIProvider.OPENAI_CHATGPT:
+            raise ValueError("ChatGPT in provider_chain requires ai.provider=openai-chatgpt and its account-specific model")
+        if self.provider == AIProvider.OPENAI_CHATGPT:
+            if not self.model.strip():
+                raise ValueError("Choose a ChatGPT model using horizon-chatgpt models")
+            if self.base_url and self.base_url.rstrip("/") != "https://api.openai.com/v1":
+                raise ValueError("openai-chatgpt uses https://api.openai.com/v1; custom base_url is not supported")
+            if self.extra_body:
+                raise ValueError("ai.extra_body is not supported for openai-chatgpt preview requests")
+            if self.api_key_env:
+                raise ValueError("openai-chatgpt uses OAuth; leave api_key_env empty")
+        return self
+
+    @field_validator("languages")
+    @classmethod
+    def validate_languages(cls, languages: List[str]) -> List[str]:
+        """Allow conventional language tags while excluding path syntax."""
+        language_tag = re.compile(r"^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*$")
+        invalid = [language for language in languages if not language_tag.fullmatch(language)]
+        if invalid:
+            raise ValueError(f"invalid language code: {invalid[0]!r}")
+        language_keys = [language.replace("_", "-").casefold() for language in languages]
+        if len(language_keys) != len(set(language_keys)):
+            raise ValueError("output languages must be unique")
+        return languages
 
 
 class GitHubSourceConfig(BaseModel):
@@ -123,6 +257,7 @@ class GitHubSourceConfig(BaseModel):
     repo: Optional[str] = None
     enabled: bool = True
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class HackerNewsConfig(BaseModel):
@@ -132,6 +267,48 @@ class HackerNewsConfig(BaseModel):
     fetch_top_stories: int = 30
     min_score: int = 100
     category: Optional[str] = None
+    profile: ProfileRoute = None
+
+
+class ExtractorType(str, Enum):
+    TRAFILATURA = "trafilatura"
+    FIRECRAWL = "firecrawl"
+    OUTCRAWL = "outcrawl"
+    SPECSTREAM = "specstream"
+
+
+class TrafilaturaExtractorConfig(BaseModel):
+    type: Literal[ExtractorType.TRAFILATURA] = ExtractorType.TRAFILATURA
+    favor_precision: bool = False
+    favor_recall: bool = False
+
+
+class FirecrawlExtractorConfig(BaseModel):
+    type: Literal[ExtractorType.FIRECRAWL] = ExtractorType.FIRECRAWL
+    api_key_env: str = "FIRECRAWL_API_KEY"
+    only_main_content: bool = True
+
+
+class OutcrawlExtractorConfig(BaseModel):
+    type: Literal[ExtractorType.OUTCRAWL] = ExtractorType.OUTCRAWL
+    api_key_env: str = "OUTCRAWL_API_KEY"
+    only_main_content: bool = True
+
+
+class SpecStreamExtractorConfig(BaseModel):
+    type: Literal[ExtractorType.SPECSTREAM] = ExtractorType.SPECSTREAM
+    api_key_env: str = "SPECSTREAM_API_KEY"
+
+
+ExtractorConfig = Annotated[
+    Union[
+        TrafilaturaExtractorConfig,
+        FirecrawlExtractorConfig,
+        OutcrawlExtractorConfig,
+        SpecStreamExtractorConfig,
+    ],
+    Field(discriminator="type"),
+]
 
 
 class RSSSourceConfig(BaseModel):
@@ -141,6 +318,8 @@ class RSSSourceConfig(BaseModel):
     url: HttpUrl
     enabled: bool = True
     category: Optional[str] = None
+    content_extractor: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class RedditSubredditConfig(BaseModel):
@@ -155,6 +334,7 @@ class RedditSubredditConfig(BaseModel):
     fetch_limit: int = 25
     min_score: int = 10
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class RedditUserConfig(BaseModel):
@@ -165,6 +345,7 @@ class RedditUserConfig(BaseModel):
     sort: str = "new"
     fetch_limit: int = 10
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class RedditConfig(BaseModel):
@@ -183,6 +364,7 @@ class TelegramChannelConfig(BaseModel):
     enabled: bool = True
     fetch_limit: int = 20
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class TelegramConfig(BaseModel):
@@ -192,7 +374,33 @@ class TelegramConfig(BaseModel):
     channels: List[TelegramChannelConfig] = Field(default_factory=list)
 
 
+class TwitterConfig(BaseModel):
+    """Twitter source configuration.
 
+    Two modes are supported:
+    - "apify": Use Apify scweet actor (requires APIFY_TOKEN, more reliable)
+    - "playwright": Use Playwright + browser cookies (free, no token needed)
+
+    `keywords` uses Apify search mode. Playwright logs a warning and skips them.
+    """
+
+    enabled: bool = True
+    mode: str = "apify"  # "apify" or "playwright"
+    users: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    fetch_limit: int = 10
+    category: Optional[str] = None
+    profile: ProfileRoute = None
+    fetch_reply_text: bool = False
+    max_replies_per_tweet: int = 3
+    max_tweets_to_expand: int = 10
+    reply_min_likes: int = 0
+    # Apify settings (used when mode == "apify")
+    apify_token_env: str = "APIFY_TOKEN"
+    actor_id: str = "altimis~scweet"
+    # Playwright settings (used when mode == "playwright")
+    cookie_dir: str = "data"
+    cookie_file_pattern: str = "x_cookies_*.json"
 
 
 class OpenBBWatchlist(BaseModel):
@@ -208,6 +416,7 @@ class OpenBBWatchlist(BaseModel):
     provider: str = "yfinance"
     fetch_limit: int = 20
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class OpenBBConfig(BaseModel):
@@ -215,7 +424,7 @@ class OpenBBConfig(BaseModel):
 
     Uses the installed `openbb` SDK to fetch news and filings for a set of
     tickers. The SDK is an optional dependency; if it is not installed the
-    scraper will no-op with a console warning rather than crash the run.
+    scraper reports a source failure while other sources can still run.
 
     Provider credentials (FMP, Benzinga, Polygon, Intrinio, Tiingo, etc.)
     are resolved by openbb from environment variables / its own user
@@ -248,6 +457,7 @@ class OSSInsightConfig(BaseModel):
     min_stars: int = 5
     max_items: int = 30
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class GDELTConfig(BaseModel):
@@ -268,6 +478,7 @@ class GDELTConfig(BaseModel):
     language: Optional[str] = None  # sourcelang filter, e.g. "english"; None = no filter
     country: Optional[str] = None  # sourcecountry filter; None = no filter
     category: Optional[str] = None  # Horizon category label for downstream grouping
+    profile: ProfileRoute = None
 
 
 class GoogleNewsConfig(BaseModel):
@@ -285,6 +496,7 @@ class GoogleNewsConfig(BaseModel):
     ceid: Optional[str] = None  # when None scraper derives it as "{country}:{language}"
     max_results: int = 100  # cap ~100
     category: Optional[str] = None
+    profile: ProfileRoute = None
 
 
 class SourcesConfig(BaseModel):
@@ -295,7 +507,7 @@ class SourcesConfig(BaseModel):
     rss: List[RSSSourceConfig] = Field(default_factory=list)
     reddit: RedditConfig = Field(default_factory=RedditConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
-    twitter: Optional[Any] = None
+    twitter: Optional[TwitterConfig] = None
     openbb: Optional[OpenBBConfig] = None
     ossinsight: OSSInsightConfig = Field(default_factory=OSSInsightConfig)
     gdelt: Optional[GDELTConfig] = None
@@ -312,11 +524,11 @@ class WebhookConfig(BaseModel):
         None  # POST body: real JSON object or string with #{key} placeholders; if empty, will use GET
     )
     headers: Optional[str] = None  # Custom headers, "Key: Value" per line
-    delivery: str = "summary"  # summary, or summary_and_items
-    overview_position: str = "first"  # For summary_and_items: first, or last
-    platform: str = "generic"  # generic, feishu, lark, dingtalk, slack, discord
-    layout: str = "markdown"  # markdown, or collapsible
-    fallback_layout: str = (
+    delivery: Literal["summary", "summary_and_items"] = "summary"
+    overview_position: Literal["first", "last"] = "first"
+    platform: Literal["generic", "feishu", "lark", "dingtalk", "slack", "discord"] = "generic"
+    layout: Literal["markdown", "collapsible"] = "markdown"
+    fallback_layout: Literal["markdown", "collapsible"] = (
         "markdown"  # Layout to use when the requested layout is unsupported
     )
     languages: Optional[List[str]] = (
@@ -324,49 +536,13 @@ class WebhookConfig(BaseModel):
     )
     enabled: bool = False
 
-    @field_validator("delivery")
-    @classmethod
-    def validate_delivery(cls, v: str) -> str:
-        allowed = {"summary", "summary_and_items"}
-        if v not in allowed:
-            raise ValueError(f"webhook.delivery must be one of {allowed}, got '{v}'")
-        return v
 
-    @field_validator("platform")
-    @classmethod
-    def validate_platform(cls, v: str) -> str:
-        allowed = {"generic", "feishu", "lark", "dingtalk", "slack", "discord"}
-        if v not in allowed:
-            raise ValueError(f"webhook.platform must be one of {allowed}, got '{v}'")
-        return v
+class WeChatConfig(BaseModel):
+    """Optional iLink delivery; credentials live in the data directory's session file."""
 
-    @field_validator("layout")
-    @classmethod
-    def validate_layout(cls, v: str) -> str:
-        allowed = {"markdown", "collapsible"}
-        if v not in allowed:
-            raise ValueError(f"webhook.layout must be one of {allowed}, got '{v}'")
-        return v
-
-    @field_validator("fallback_layout")
-    @classmethod
-    def validate_fallback_layout(cls, v: str) -> str:
-        allowed = {"markdown", "collapsible"}
-        if v not in allowed:
-            raise ValueError(
-                f"webhook.fallback_layout must be one of {allowed}, got '{v}'"
-            )
-        return v
-
-    @field_validator("overview_position")
-    @classmethod
-    def validate_overview_position(cls, v: str) -> str:
-        allowed = {"first", "last"}
-        if v not in allowed:
-            raise ValueError(
-                f"webhook.overview_position must be one of {allowed}, got '{v}'"
-            )
-        return v
+    enabled: bool = False
+    languages: Optional[List[str]] = None
+    chunk_size: int = Field(default=4000, gt=0, le=4000)
 
 
 class EmailConfig(BaseModel):
@@ -394,23 +570,77 @@ class CategoryGroupConfig(BaseModel):
     categories: List[str] = Field(min_length=1)
 
 
-class FilteringConfig(BaseModel):
-    """Content filtering configuration."""
+class ProfileSettingsConfig(BaseModel):
+    """User preferences applied to a processing profile at runtime."""
 
-    ai_score_threshold: float = 7.0
+    model_config = ConfigDict(extra="forbid")
+
+    threshold: Optional[float] = Field(default=None, ge=0, le=10)
+    topic_dedup: bool = True
+
+
+class ProcessingConfig(BaseModel):
+    """Profile discovery and fallback settings."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profiles_dir: str = "profiles"
+    default_profile: str = "tech-news"
+    profile_settings: Dict[str, ProfileSettingsConfig] = Field(default_factory=dict)
+
+
+class DisplayConfig(BaseModel):
+    """Controls terminal output presentation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    icon_style: Literal["emoji", "nerd", "ascii"] = "emoji"
+
+
+class CollectionConfig(BaseModel):
+    """Controls which source items are fetched."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Positivity is collection_hours(), applied once before a run. This field
+    # stores the configured number and does not check it again.
     time_window_hours: int = 24
+
+
+class DigestConfig(BaseModel):
+    """Controls grouping and limits in the final digest."""
+
+    model_config = ConfigDict(extra="forbid")
+
     max_items: Optional[int] = Field(default=None, gt=0)
     category_groups: Dict[str, CategoryGroupConfig] = Field(default_factory=dict)
+    group_by: Literal["category", "profile"] = "category"
     default_group: str = "other"
     default_group_limit: Optional[int] = Field(default=None, gt=0)
+    profile_order: List[str] = Field(default_factory=list)
+
+    @field_validator("profile_order")
+    @classmethod
+    def validate_profile_order(cls, value: List[str]) -> List[str]:
+        if any(not profile_id.strip() for profile_id in value):
+            raise ValueError("digest.profile_order entries must be non-empty strings")
+        if len(value) != len(set(value)):
+            raise ValueError("digest.profile_order entries must be unique")
+        return value
 
 
 class Config(BaseModel):
     """Main configuration model."""
 
-    version: str = "1.0"
+    model_config = ConfigDict(extra="forbid")
+
     ai: AIConfig
     sources: SourcesConfig
-    filtering: FilteringConfig
+    collection: CollectionConfig = Field(default_factory=CollectionConfig)
+    digest: DigestConfig = Field(default_factory=DigestConfig)
+    processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
+    display: DisplayConfig = Field(default_factory=DisplayConfig)
+    extractors: Dict[str, ExtractorConfig] = Field(default_factory=dict)
     email: Optional[EmailConfig] = None
     webhook: Optional[WebhookConfig] = None
+    wechat: Optional[WeChatConfig] = None

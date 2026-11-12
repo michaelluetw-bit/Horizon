@@ -4,7 +4,7 @@
 <p><strong>Enjoy the News itself. Leave others to Horizon</strong></p>
 
 <a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/daily" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/weekly?language=Python" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/daily?language=Python" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/Thysrael/Horizon" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=7a4b606e28e4477998d35851cf4fdddf&claim_uid=rtjnLkYT7ziQJUG" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 <br>
 
@@ -27,7 +27,7 @@
 
 📡 Your own AI-powered news radar. Generates daily briefings in English & Chinese. | 构建你专属的 AI 新闻雷达
 
-[📖 Live Demo](https://thysrael.github.io/Horizon/) · [📋 Configuration Guide](https://thysrael.github.io/Horizon/configuration) · [简体中文](README_zh.md) · [日本語](README_ja.md)
+[📖 Live Demo](https://thysrael.github.io/Horizon/) · [📋 Configuration Guide](https://thysrael.github.io/Horizon/configuration) · [💬 QQ Group](#community) · [简体中文](README_zh.md) · [日本語](README_ja.md)
 
 </div>
 
@@ -51,17 +51,23 @@
 <br>
 <table>
 <tr>
-<td width="33.33%">
+<td width="50%" valign="top">
 <p align="center"><strong>Terminal Output</strong></p>
 <img src="docs/assets/terminal_log.png" alt="Terminal Output" />
 </td>
-<td width="33.33%">
+<td width="50%" valign="top">
 <p align="center"><strong>Feishu Notification</strong></p>
 <img src="docs/assets/feishu_en.png" alt="Feishu Notification" />
 </td>
-<td width="33.33%">
+</tr>
+<tr>
+<td width="50%" valign="top">
 <p align="center"><strong>Email Delivery</strong></p>
 <img src="docs/assets/email.png" alt="Email Delivery" />
+</td>
+<td width="50%" valign="top">
+<p align="center"><strong>WeChat Delivery</strong></p>
+<img src="docs/assets/wechat.jpg" alt="Horizon briefing header, overview, and details in WeChat" />
 </td>
 </tr>
 </table>
@@ -69,104 +75,52 @@
 
 ## Why Horizon?
 
-Good news is scattered; bad news is endless. Horizon gives you a personal first pass over Hacker News, Reddit, Telegram, RSS, and GitHub: it fetches, deduplicates, scores, filters, and enriches stories with background context and community discussion.
+Good reads are scattered across feeds, forums, and timelines. Your attention isn't unlimited. Horizon collects, filters, and deduplicates them, then brings the worthwhile ones to you with context and community discussion.
 
-But Horizon is not just another summarizer. AI is great at reducing noise, but news still needs human taste: the sources you trust, the comments that change how you read a story, and the hidden gems only people can share. Horizon keeps that human layer in the loop with customizable sources, thresholds, models, languages, delivery channels, comment summaries, and a community source hub.
+Your taste shapes what you read—and what you want from it. A news story calls for “why it matters”; an engineering deep dive calls for “what I can use.” Horizon's **profiles** give each kind of content its own scoring criteria and output, for a briefing that feels handpicked.
 
 ## Features
 
-- **📡 Watch Your Own Sources** — Track Hacker News, RSS, Reddit, Telegram, Twitter/X, GitHub releases or user activity, and OpenBB financial news watchlists in one pipeline
-- **🤖 Turn Noise Into a Reading List** — Score each item from 0-10 with Claude, GPT, Gemini, DeepSeek, Doubao, MiniMax, Ollama, or any OpenAI-compatible API
-- **🔗 Merge Repeated Stories** — Deduplicate the same story across platforms before it reaches your briefing
-- **🔍 Understand the Background** — Add web-researched context for unfamiliar concepts, companies, projects, and technical terms
-- **💬 Read the Conversation** — Collect and summarize community comments from Hacker News, Reddit, and other supported sources
-- **🌐 Publish in Two Languages** — Generate English and Chinese daily briefings from the same source set
-- **📝 Ship a Daily Site** — Publish generated Markdown as a GitHub Pages daily briefing site
-- **📧 Deliver by Email** — Run a self-hosted SMTP/IMAP newsletter with automatic subscribe and unsubscribe handling
-- **🔔 Push to Chat or Automations** — Send templated results to Feishu/Lark, DingTalk, Slack, Discord, or custom webhook endpoints
-- **🧙 Start From Your Interests** — Use the setup wizard to generate a personalized source configuration
-- **⚙️ Tune the Radar** — Customize sources, thresholds, models, languages, and delivery channels from one JSON config
+- **📡 Bring Your Sources Together** — Follow RSS, Hacker News, Reddit, Telegram, X, GitHub, financial news, and more.
+- **🎯 Decide What's Worth Reading** — Define scoring rubrics with profiles, set individual thresholds, and merge repeated stories within each profile.
+- **🧩 Give Every Read the Right Treatment** — Choose summaries, context, solutions, or takeaways with Markdown prompts and JSON block definitions.
+- **💬 Go Beyond the Headline** — Add web-researched background and community discussion where they help explain the story.
+- **⚖️ Make Room for All Your Interests** — Cap the briefing's length and each category's share so one busy topic doesn't crowd out the rest.
+- **📬 Read Where You Already Are** — Generate English and Chinese briefings as Markdown, publish to Pages, or deliver by email and webhook.
+
+### One Briefing, Different Ways to Read
+
+A profile is a reusable set of editorial rules: **what belongs, what's worth keeping, and what to write.** Built-in examples:
+
+| What you follow | Profile | What you get |
+|---|---|---|
+| Technology news | `tech-news` | Events and context, with impact and community discussion when useful |
+| Engineering deep dives | `tech-blog` | Background, solution, and practical takeaways |
+| AI creator material | `ai-creator` | A summary, with timely hooks and content angles when useful |
+
+Assign a profile to a source, or let AI choose. Want a different take? Adapt an existing profile—usually without changing Python. [Make a profile your own →](docs/profiles.md)
 
 ## How It Works
 
-```mermaid
-%%{init: {
-  "theme": "base",
-  "themeVariables": {
-    "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-    "fontSize": "18px",
-    "primaryTextColor": "#2d2a3e",
-    "primaryBorderColor": "#e0dbd3",
-    "lineColor": "#7c7891",
-    "tertiaryColor": "#faf8f5",
-    "clusterBkg": "#f3f0eb",
-    "clusterBorder": "#e0dbd3"
-  }
-}}%%
-flowchart LR
-    classDef config fill:#fbbf24,stroke:#d4a017,color:#2d2a3e,stroke-width:1.5px;
-    classDef source fill:#ede7fb,stroke:#6d4aaa,color:#2d2a3e,stroke-width:1.5px;
-    classDef process fill:#ffe8db,stroke:#e0652e,color:#2d2a3e,stroke-width:1.5px;
-    classDef output fill:#f9d7e5,stroke:#be185d,color:#2d2a3e,stroke-width:1.5px;
+![Horizon architecture: ten sources feed a profile-driven pipeline with history and web search tools, delivering to Markdown, Pages, email, WeChat, and webhooks.](docs/assets/architecture.svg)
 
-    config["⚙️ Config<br/>sources, thresholds, models, outputs"]
+[Editable OmniGraffle source](docs/assets/architecture.graffle)
 
-    subgraph sources["Configured Sources"]
-        rss["📡 RSS"]
-        hn["📰 Hacker News"]
-        reddit["💬 Reddit"]
-        telegram["✈️ Telegram"]
-        twitter["🐦 Twitter / X"]
-        github["🐙 GitHub"]
-        openbb["💹 OpenBB"]
-    end
+**Profiles define the treatment; runtime settings reflect your reading preferences.** Each item routes to one profile. Analysis, filtering, and deduplication happen before enrichment, then the selected items become a briefing grouped by profile.
 
-    fetch["📥 Fetch"]
-    dedup["🧹 Deduplicate"]
-    score["🤖 AI Score & Filter"]
-    enrich["🔎 Enrich"]
-    summary["📝 Summarize"]
+Run the full pipeline through the CLI, or let an AI assistant call its stages through [MCP](src/mcp/README.md).
 
-    subgraph outputs["Outputs"]
-        direction TB
-        site["🌐 Pages"]
-        email["📧 Email"]
-        webhook["🔔 Webhooks"]
-        mcp["🧩 MCP"]
-    end
+## Agent Skill
 
-    config --> fetch
-    rss --> fetch
-    hn --> fetch
-    reddit --> fetch
-    telegram --> fetch
-    twitter --> fetch
-    github --> fetch
-    openbb --> fetch
+Let your AI assistant configure sources, customize Profiles, and run Horizon:
 
-    fetch --> dedup --> score --> enrich --> summary
-    config --> score
-    config --> summary
-    config --> outputs
-
-    summary --> site
-    summary --> email
-    summary --> webhook
-    summary --> mcp
-
-    class config config
-    class rss,hn,reddit,telegram,twitter,github,openbb source
-    class fetch,dedup,score,enrich,summary process
-    class site,email,webhook,mcp output
+```bash
+npx skills add Thysrael/Horizon --skill horizon -g
 ```
 
-1. **Define** — Configure sources, thresholds, models, languages, and delivery from one JSON config.
-2. **Fetch** — Pull latest content from all configured sources concurrently.
-3. **Deduplicate** — Merge items pointing to the same story or URL across platforms.
-4. **Score & Filter** — Use AI to rank items and keep only those above your threshold.
-5. **Enrich** — Search the web for background context and collect community discussion for important items.
-6. **Summarize** — Generate a structured Markdown briefing with summaries, tags, and references.
-7. **Deliver** — Publish the result to GitHub Pages, email, webhooks such as Feishu, MCP, or local files.
+[Setup and usage](docs/agent-skill.md) · [Download Skill ZIP](https://thysrael.github.io/Horizon/downloads/horizon-skill.zip)
+
+The command requires Node.js 22.20+. Then ask your assistant to install and configure Horizon, or follow the Quick Start below.
 
 ## Quick Start
 
@@ -208,17 +162,11 @@ uv pip install --only-binary=:all: openbb openbb-benzinga
 git clone https://github.com/Thysrael/Horizon.git
 cd Horizon
 
-# Configure environment
-cp .env.example .env
-cp data/config.example.json data/config.json
-# Edit .env and data/config.json with your API keys and preferences
-
-# Run with Docker Compose
-docker compose run --rm horizon
-
-# Or run with custom time window
-docker compose run --rm horizon --hours 48
+# Optional: build with comma-separated extras before the first run
+docker compose build --build-arg EXTRAS=openbb horizon
 ```
+
+Full-text extraction with `trafilatura` is included in the base install. The `twitter` extra also requires a Playwright browser and system packages, which the current Dockerfile does not install.
 
 ### 2. Configure
 
@@ -228,7 +176,9 @@ docker compose run --rm horizon --hours 48
 uv run horizon-wizard
 ```
 
-The wizard asks about your interests (e.g. "LLM inference", "嵌入式", "web security") and auto-generates `data/config.json`.
+The wizard asks about your interests (e.g. "LLM inference", "嵌入式", "web security") and auto-generates `data/config.json`. See [Interactive Wizard](docs/configuration.md#interactive-wizard) for CLI options.
+
+Eligible ChatGPT subscribers can choose `openai-chatgpt` to use their plan through [Sign in with ChatGPT](docs/chatgpt.md), without an OpenAI API key.
 
 **Option B: Manual configuration**
 
@@ -248,14 +198,33 @@ Minimal manual configuration:
   },
   "sources": {
     "rss": [
-      { "name": "Simon Willison", "url": "https://simonwillison.net/atom/everything/" }
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "profile": "tech-news"
+      }
     ]
   },
-  "filtering": {
-    "ai_score_threshold": 6.0
+  "processing": {
+    "profiles_dir": "profiles",
+    "default_profile": "tech-news",
+    "profile_settings": {
+      "tech-news": {
+        "threshold": 7.0,
+        "topic_dedup": true
+      }
+    }
   }
 }
 ```
+
+An explicit source `profile` uses that profile directly. Omit it or set it to
+`"auto"` to let AI match the item against all available profiles. Set it to an
+array such as `["tech-news", "finance-news"]` to restrict AI matching to those
+profiles. See
+[Processing Profiles](docs/profiles.md) for profile structure and behavior.
+Per-profile user preferences such as score thresholds and topic deduplication
+belong in `processing.profile_settings`, not in the profile files.
 
 **Balanced digest (optional)**
 
@@ -265,8 +234,7 @@ results. Categories come from source configuration such as
 
 ```jsonc
 {
-  "filtering": {
-    "ai_score_threshold": 6.0,
+  "digest": {
     "max_items": 20,
     "category_groups": {
       "ai": {
@@ -284,8 +252,9 @@ results. Categories come from source configuration such as
 }
 ```
 
-Group limits are applied after AI score filtering and before enrichment. If
-`category_groups` and `max_items` are omitted, filtering behaves as before.
+Group limits are applied after profile filtering and before enrichment. If
+`category_groups`, `max_items`, and `default_group_limit` are omitted, no balanced
+digest limits apply.
 
 `api_key_env` must be the name of an environment variable, not the API key
 itself. Put the real secret in `.env`:
@@ -312,25 +281,30 @@ For the full reference, see the [Configuration Guide](docs/configuration.md).
 
 ### 3. Run
 
-#### Local Installation
+**A. Local installation**
 
 ```bash
-uv run horizon           # Run with default 24h window
-uv run horizon --hours 48  # Fetch from last 48 hours
+uv run horizon [OPTIONS]
 ```
 
-#### With Docker
+**B. Docker**
 
 ```bash
-docker compose run --rm horizon           # Run with default 24h window
-docker compose run --rm horizon --hours 48  # Fetch from last 48 hours
+docker compose run --rm horizon [OPTIONS]
 ```
 
-The generated report will be saved to `data/summaries/`.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--hours N` | 24 | Fetch from last N hours |
+| `-d`, `--data-dir PATH` | `data` | Path to the data directory |
+| `-c`, `--config PATH` | `<data-dir>/config.json` | Path to config file |
+| `-l`, `--log-level LEVEL` | `WARNING` | Logging level (DEBUG/INFO/WARNING/ERROR/CRITICAL) |
+
+`--data-dir` changes the state directory, including summaries, subscribers, and the default config location; `--config` changes only the config file. The generated report is saved to `data/summaries/` (or `<data-dir>/summaries/` if `--data-dir` is set). See [Configuration Paths](docs/configuration.md#configuration-paths) for combining both flags and initializing a custom config location.
 
 ### 4. Automate (Optional)
 
-Horizon works great as a **GitHub Actions** cron job. See [`.github/workflows/daily-summary.yml`](.github/workflows/daily-summary.yml) for a ready-to-use workflow that generates and deploys your daily briefing to GitHub Pages automatically.
+Schedule Horizon with **GitHub Actions** using the [daily workflow template](.github/workflows/daily-summary.yml.disabled). The template is disabled in this repository; configure it for your deployment and rename it to `daily-summary.yml` to enable it.
 
 ## Supported Sources
 
@@ -340,9 +314,12 @@ Horizon works great as a **GitHub Actions** cron job. See [`.github/workflows/da
 | **RSS / Atom** | Any RSS or Atom feed | — |
 | **Reddit** | Subreddits + user posts | Yes (top N comments) |
 | **Telegram** | Public channel messages | — |
-| **Twitter / X** | Tweets from specific users | Yes (top N replies) |
+| **Twitter / X** | User timelines + keyword searches (Apify) | Yes (top N replies) |
 | **GitHub** | User events & repo releases | — |
 | **OpenBB** | Financial company news by watchlist/provider | — |
+| **OSS Insight** | Trending open-source repositories | — |
+| **GDELT** | News matching a search query | — |
+| **Google News** | News search via RSS | — |
 
 ## Where Your Briefing Goes
 
@@ -353,9 +330,9 @@ Horizon can publish or deliver the generated briefing in several ways:
 | **GitHub Pages Daily Site** | Copies generated Markdown into `docs/` so GitHub Pages can publish a daily-updated briefing site |
 | **Email Subscription** | Sends the daily briefing to subscribers and handles subscribe/unsubscribe requests through SMTP/IMAP |
 | **Webhook Notification** | Pushes success or failure results to Feishu/Lark, DingTalk, Slack, Discord, or any custom webhook endpoint |
-| **MCP Server** | Exposes Horizon pipeline steps as tools so AI assistants can fetch, score, filter, enrich, summarize, and run the full workflow |
+| **WeChat Notification** | Sends briefings through iLink Bot after QR login and a message from you; WeChat reply limits apply |
 
-For setup details, see the [Configuration Guide](docs/configuration.md). For MCP tool references and client setup, see [`src/mcp/README.md`](src/mcp/README.md) and [`src/mcp/integration.md`](src/mcp/integration.md).
+For delivery setup, see the [Configuration Guide](docs/configuration.md). To run pipeline stages from an AI assistant, use the **MCP Server**: [tools](src/mcp/README.md) · [client setup](src/mcp/integration.md).
 
 ## Supported By
 
@@ -363,27 +340,44 @@ Horizon is an open-source project maintained in spare time. If you'd like to sup
 
 | Supporter | Details |
 |-----------|---------|
+| [<img src="docs/assets/modelflare-logo.png" alt="Modelflare" width="220" />](https://modelflare.dev/sign-up?utm_source=github&utm_campaign=horizon) | Thanks to Modelflare for sponsoring this project! Modelflare: Full strength, stable, nothing watered down. Global SOTA models at a lower cost. Operated by US-based Havenbyte LLC, Modelflare supports GPT, Claude, Gemini, Grok, and other leading models through common compatible protocols, plus 40+ image and video models.<br><br>Cache compensation is a highlight: selected OpenAI groups (price-first, stable, and premium) guarantee daily cache hit rates of 65%, 75%, or 85%, and if eligible requests fall short, Modelflare refunds the difference, visible on the usage dashboard after settlement.<br><br>Special offers: a single top-up of US$20 unlocks the GPT discount group at a 0.015x price multiplier, and a single top-up of US$50 unlocks the Claude discount group at a 0.03x multiplier. Register via [this exclusive link](https://modelflare.dev/sign-up?utm_source=github&utm_campaign=horizon) to get started. |
 | [<img src="docs/assets/compshare-logo.png" alt="Compshare / 优云智算" width="220" />](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon) | Compshare currently supports Horizon. Compshare is UCloud's AI cloud platform, offering cost-effective monthly and pay-as-you-go domestic model agent plans starting from RMB 49/month, as well as stable officially relayed overseas models. It supports Claude Code, Codex, and API usage, with enterprise-grade high concurrency, 24/7 technical support, and self-service invoicing.<br><br>Register through their [link](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon) to receive a free RMB 5 trial credit. |
+| [<img src="docs/assets/ofoxai-logo.svg" alt="OfoxAI" width="220" />](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=horizon) | OfoxAI is a unified AI API platform bringing together text, image, and video models from multiple providers. With OpenAI-compatible endpoints and native Anthropic and Gemini interfaces, developers can access models for AI applications, agents, and content creation through one platform.<br><br>[Explore OfoxAI models and APIs →](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=horizon) |
+| [<img src="docs/assets/astraflow-logo.png" alt="AstraFlow" width="100" />](https://www.ucloud.cn/site/active/astraflow-credit?ytag=geo_waituo_Horizon) | Thanks to AstraFlow for sponsoring Horizon! AstraFlow is UCloud's model platform, bringing together 200+ leading AI models and video generation models for text and video creation in one place. It offers per-key billing and detailed usage records.<br><br>Exclusive offer for Horizon users: [claim RMB 50 in compute credits](https://www.ucloud.cn/site/active/astraflow-credit?ytag=geo_waituo_Horizon) to try model APIs and content creation. |
+| [<img src="docs/assets/apixo-logo.png" alt="APIXO" width="220" />](https://apixo.ai/?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon) | APIXO: An all-in-one AI image and video creation platform<br><br>APIXO brings together multiple AI image and video models. Create directly in your browser without coding, or integrate models into your applications and automated workflows via API. Get early access to [Seedream 5.5](https://apixo.ai/models/seedream-5-5?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon), with 1K text-to-image generation starting at just $0.014 per image, 30% off the official price. The discount applies automatically, with no promo code required.<br><br>[Explore APIXO models and offers →](https://apixo.ai/models/seedream-5-5?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon) Offer ends December 31, 2026 at 23:59 Beijing time (UTC+8). |
 
 ## Documentation
 
 | Guide | Description |
 |-------|-------------|
-| [Configuration](docs/configuration.md) | AI providers, sources, filtering, email, webhook, GitHub Pages, and MCP setup |
+| [Configuration](docs/configuration.md) | AI providers, sources, profiles, filtering, email, webhook, WeChat, GitHub Pages, and MCP setup |
+| [Processing Profiles](docs/profiles.md) | Profile routing, prompts, runtime filtering preferences, enrichment blocks, and tools |
 | [Scoring](docs/scoring.md) | How Horizon evaluates and ranks news items |
 | [Scrapers](docs/scrapers.md) | Source scraper details and extension notes |
+| [Extractors](docs/extractors.md) | Full article extraction for RSS sources |
 | [MCP Tools](src/mcp/README.md) | Tool reference for MCP-compatible clients |
+| [Agent Skill](docs/agent-skill.md) | Use an AI assistant to configure, run, customize, schedule, and extend Horizon |
 
 ## Project Status
 
-Horizon already supports the full daily briefing loop: multi-source collection, AI scoring, deduplication, enrichment, comment summaries, bilingual generation, GitHub Pages publishing, email delivery, webhook delivery, Docker deployment, MCP integration, and the setup wizard.
+Horizon already supports the full daily briefing loop: multi-source collection, profile-driven analysis and enrichment, deduplication, comment summaries, bilingual generation, GitHub Pages publishing, email delivery, webhook delivery, WeChat delivery, Docker deployment, MCP integration, and the setup wizard.
 
 Planned improvements:
 
 - More source types, such as Discord
-- Custom scoring prompts per source
 - Publish releases on GitHub
 - Publish the package to PyPI for `pip install`
+
+## Community
+
+Join the Horizon user and developer QQ group to share sources, profiles, and deployment tips.
+
+<p align="center">
+  <img src="docs/assets/qq-group.png" alt="QR code for Horizon QQ group 1106121909" width="240" height="240" />
+  <br />
+  <strong>QQ group: 1106121909</strong><br />
+  Scan with QQ or search the group number to join.
+</p>
 
 ## Contributing
 

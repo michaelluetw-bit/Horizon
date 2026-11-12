@@ -5,7 +5,7 @@
 <p><strong>你只需享受新闻，剩下交给 Horizon。</strong></p>
 
 <a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/daily" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/weekly?language=Python" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/22864?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-22864" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/22864/daily?language=Python" alt="Thysrael%2FHorizon | Trendshift" width="250" height="55"/></a>
 <a href="https://hellogithub.com/repository/Thysrael/Horizon" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=7a4b606e28e4477998d35851cf4fdddf&claim_uid=rtjnLkYT7ziQJUG" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" /></a>
 <br>
 
@@ -28,7 +28,7 @@
 
 📡 构建你专属的 AI 新闻雷达，生成中英双语日报。 | Your own AI-powered news radar.
 
-[📖 在线演示](https://thysrael.github.io/Horizon/) · [📋 配置指南](https://thysrael.github.io/Horizon/configuration) · [English](README.md) · [日本語](README_ja.md)
+[📖 在线演示](https://thysrael.github.io/Horizon/) · [📋 配置指南](https://thysrael.github.io/Horizon/configuration) · [💬 QQ 群](#交流群) · [English](README.md) · [日本語](README_ja.md)
 
 </div>
 
@@ -52,17 +52,23 @@
 <br>
 <table>
 <tr>
-<td width="33.33%">
+<td width="50%" valign="top">
 <p align="center"><strong>终端输出</strong></p>
 <img src="docs/assets/terminal_log.png" alt="终端输出" />
 </td>
-<td width="33.33%">
+<td width="50%" valign="top">
 <p align="center"><strong>飞书通知</strong></p>
 <img src="docs/assets/feishu_zh.png" alt="飞书通知" />
 </td>
-<td width="33.33%">
+</tr>
+<tr>
+<td width="50%" valign="top">
 <p align="center"><strong>邮件推送</strong></p>
 <img src="docs/assets/email.png" alt="邮件推送" />
+</td>
+<td width="50%" valign="top">
+<p align="center"><strong>微信推送</strong></p>
+<img src="docs/assets/wechat.jpg" alt="微信中的日报头部、总览和正文" />
 </td>
 </tr>
 </table>
@@ -70,104 +76,40 @@
 
 ## 为什么需要 Horizon？
 
-好新闻分散在各处，坏信息却源源不断。Horizon 为你先完成第一轮筛选：从 Hacker News、Reddit、Telegram、RSS、Twitter/X、GitHub 和 OpenBB 抓取内容，合并重复新闻，用 AI 打分过滤，并为重要内容补充背景解释和社区讨论。
+好内容散落在订阅、社区和时间线里，你的阅读时间却有限。Horizon 替你收集、筛选、去重，再把值得读的内容连同背景和讨论送到面前。
 
-但 Horizon 不只是又一个摘要工具。AI 很擅长降低噪声，但新闻仍然需要人的品味：你信任哪些信息源，哪些评论改变了你对事件的理解，哪些小众来源值得被更多人看见。Horizon 通过可定制的信息源、筛选标准、模型、语言、分发方式、评论摘要和社区信息源官网，把这层“人味”保留下来。
+读什么，需要你的品味；怎么读，也一样。新闻里你想知道「为什么重要」，技术长文里你想找到「有什么值得借鉴」。Horizon 的 **Profile** 让不同内容有不同的评分标准和呈现方式，也让这份日报更像你亲手挑选的。
 
 ## 功能特性
 
-- **📡 关注你的信息源** — 将 Hacker News、RSS、Reddit、Telegram、Twitter/X、GitHub Release / 用户动态，以及 OpenBB 金融新闻观察列表纳入同一条 pipeline
-- **🤖 把噪声变成阅读清单** — 使用 Claude、GPT、Gemini、DeepSeek、豆包、MiniMax 或任意 OpenAI 兼容 API，为每条内容评分 0-10
-- **🔗 合并重复新闻** — 在生成日报前自动合并来自不同平台的相同故事
-- **🔍 补全背景知识** — 为陌生概念、公司、项目和技术术语补充网络搜索得到的背景解释
-- **💬 读到社区声音** — 收集并总结 Hacker News、Reddit 等来源的评论讨论
-- **🌐 生成双语日报** — 基于同一组信息源生成英文和中文日报
-- **📝 发布日报站点** — 将生成的 Markdown 发布为 GitHub Pages 静态日报站点
-- **📧 邮件分发** — 运行自托管 SMTP/IMAP 邮件列表，自动处理订阅与退订
-- **🔔 推送到聊天和自动化工具** — 将模板化结果发送到飞书、钉钉、Slack、Discord 或自定义 Webhook
-- **🧙 从兴趣开始配置** — 通过交互式向导根据你的兴趣生成个性化信息源配置
-- **⚙️ 调校你的新闻雷达** — 在单个 JSON 配置中定制信息源、阈值、模型、语言和分发方式
+- **📡 把关注汇到一处** — 从 RSS、Hacker News、Reddit、Telegram、X、GitHub 和金融新闻等来源收集内容。
+- **🎯 值不值得读，你定标准** — 用 Profile 定义评分规则，分别设置筛选门槛，合并同一 Profile 下的重复报道。
+- **🧩 新闻看背景，长文看方法** — 自定义摘要、背景、方案、启示等内容区块，修改 Markdown 提示词和 JSON 配置即可。
+- **💬 多看一层，再下判断** — 按需搜索背景、提炼社区讨论，读到标题之外的信息。
+- **⚖️ 留下刚好够读的量** — 限制日报总条数和各类内容的份额，让热门话题给其他兴趣留点位置。
+- **📬 在你习惯的地方读** — 生成中英双语日报，保存为 Markdown、发布到 Pages，或通过邮件和 Webhook 送达。
+
+### 同一份日报，不同的读法
+
+一个 Profile 是一套可复用的内容处理规则：**什么内容适用、什么值得留下、最后写成什么样。** 内置示例包括：
+
+| 你在读什么 | Profile | 它替你提炼什么 |
+|---|---|---|
+| 科技新闻 | `tech-news` | 事件与背景，按需补充影响和社区讨论 |
+| 技术长文 | `tech-blog` | 背景、方案、值得借鉴的启示 |
+| AI 创作素材 | `ai-creator` | 内容摘要，按需提炼时效意义与创作切入点 |
+
+为信息源指定 Profile，或让 AI 自动匹配。想换一种读法？从现有 Profile 改起，通常无需修改 Python。[定制你的 Profile →](docs/profiles.md)
 
 ## 工作原理
 
-```mermaid
-%%{init: {
-  "theme": "base",
-  "themeVariables": {
-    "fontFamily": "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-    "fontSize": "18px",
-    "primaryTextColor": "#2d2a3e",
-    "primaryBorderColor": "#e0dbd3",
-    "lineColor": "#7c7891",
-    "tertiaryColor": "#faf8f5",
-    "clusterBkg": "#f3f0eb",
-    "clusterBorder": "#e0dbd3"
-  }
-}}%%
-flowchart LR
-    classDef config fill:#fbbf24,stroke:#d4a017,color:#2d2a3e,stroke-width:1.5px;
-    classDef source fill:#ede7fb,stroke:#6d4aaa,color:#2d2a3e,stroke-width:1.5px;
-    classDef process fill:#ffe8db,stroke:#e0652e,color:#2d2a3e,stroke-width:1.5px;
-    classDef output fill:#f9d7e5,stroke:#be185d,color:#2d2a3e,stroke-width:1.5px;
+![Horizon 架构：十类信息源汇入 Profile 驱动的处理流程，按区块启用历史与网络搜索，再通过 Markdown、Pages、邮件、微信和 Webhook 分发。](docs/assets/architecture.svg)
 
-    config["⚙️ 配置<br/>信息源、阈值、模型、输出方式"]
+[OmniGraffle 可编辑图源](docs/assets/architecture.graffle)
 
-     subgraph sources["已配置的信息源"]
-         rss["📡 RSS"]
-         hn["📰 Hacker News"]
-         reddit["💬 Reddit"]
-         telegram["✈️ Telegram"]
-         twitter["🐦 Twitter / X"]
-         github["🐙 GitHub"]
-         openbb["💹 OpenBB"]
-      end
+**Profile 定义处理规则，运行配置掌握阅读偏好。** 每条内容路由到一个 Profile，完成分析、筛选和去重后，再为入选内容生成区块，按 Profile 分组渲染成日报。
 
-    fetch["📥 抓取"]
-    dedup["🧹 新闻去重"]
-    score["🤖 AI 打分与过滤"]
-    enrich["🔎 内容丰富"]
-    summary["📝 总结生成"]
-
-    subgraph outputs["输出形式"]
-        direction TB
-        site["🌐 Pages"]
-        email["📧 邮件"]
-        webhook["🔔 Webhook"]
-        mcp["🧩 MCP"]
-    end
-
-     config --> fetch
-     rss --> fetch
-     hn --> fetch
-     reddit --> fetch
-      telegram --> fetch
-      twitter --> fetch
-      github --> fetch
-      openbb --> fetch
-
-    fetch --> dedup --> score --> enrich --> summary
-    config --> score
-    config --> summary
-    config --> outputs
-
-    summary --> site
-    summary --> email
-    summary --> webhook
-    summary --> mcp
-
-    class config config
-    class rss,hn,reddit,telegram,twitter,github,openbb source
-    class fetch,dedup,score,enrich,summary process
-    class site,email,webhook,mcp output
-```
-
-1. **定义** — 用一个 JSON 配置好信息源、阈值、模型、语言和分发方式。
-2. **抓取** — 并发拉取所有已配置信息源的最新内容。
-3. **去重** — 合并来自不同平台、指向同一故事或 URL 的内容。
-4. **打分与过滤** — 用 AI 对内容排序，只保留超过阈值的条目。
-5. **丰富** — 为重要内容补充搜索得到的背景信息和社区讨论。
-6. **总结** — 生成结构化的 Markdown 日报，包含摘要、标签和参考链接。
-7. **分发** — 将结果发布到 GitHub Pages、邮件、飞书等 webhook、MCP 或本地文件。
+通过 CLI 运行完整流程，也可通过 [MCP](src/mcp/README.md) 让 AI 助手调用采集、分析和生成等阶段。
 
 ## 赞助
 
@@ -175,7 +117,23 @@ Horizon 是一个业余时间维护的开源项目。如果你愿意支持这个
 
 | 支持方 | 说明 |
 |--------|------|
+| [<img src="docs/assets/modelflare-logo.png" alt="Modelflare" width="220" />](https://modelflare.dev/sign-up?utm_source=github&utm_campaign=horizon) | 感谢 Modelflare 赞助本项目！Modelflare：满血、稳定、不掺水，以更低成本使用全球 SOTA 模型。平台由美国 Havenbyte LLC 运营，通过常见兼容协议支持 GPT、Claude、Gemini、Grok 等领先模型，并提供 40+ 图片和视频模型。<br><br>缓存补偿是一大亮点：指定 OpenAI 分组（价格优先、稳定、优质）分别保障每日 65%、75% 或 85% 的缓存命中率；符合条件的请求若未达标，Modelflare 将退还差额，结算后可在用量看板查看。<br><br>特别优惠：单笔充值 20 美元即可解锁价格倍率为 0.015x 的 GPT 优惠分组，单笔充值 50 美元即可解锁价格倍率为 0.03x 的 Claude 优惠分组。通过[此专属链接](https://modelflare.dev/sign-up?utm_source=github&utm_campaign=horizon)注册即可开始使用。 |
 | [<img src="docs/assets/compshare-logo.png" alt="Compshare / 优云智算" width="220" />](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon) | 优云智算目前正在支持 Horizon。优云智算是 UCloud 旗下 AI 云平台，主打包月、按次的高性价比国模 Agent Plan 套餐，低至 49 元/月起，同时提供官转稳定海外模型。支持接入 Claude Code、Codex 及 API 调用，支持企业高并发、7*24 技术支持和自助开票。<br><br>通过其[链接](https://www.compshare.cn/?ytag=GPU_YY_git_Horizon)注册，可获得 5 元平台体验金。 |
+| [<img src="docs/assets/ofoxai-logo.svg" alt="OfoxAI" width="220" />](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=horizon) | OfoxAI 是统一的 AI API 平台，汇集多家文本、图像和视频模型，支持 OpenAI 兼容接口及 Anthropic、Gemini 原生接口。开发者可通过一个平台为 AI 应用、智能体和内容创作接入模型，按任务选择合适的能力。<br><br>[探索 OfoxAI 模型与 API →](https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=horizon) |
+| [<img src="docs/assets/astraflow-logo.png" alt="星图 AstraFlow" width="100" />](https://www.ucloud.cn/site/active/astraflow-credit?ytag=geo_waituo_Horizon) | 感谢星图 AstraFlow 赞助 Horizon！AstraFlow 是 UCloud 推出的模型服务平台，汇集 200+ 主流大模型及视频生成模型，在一个平台完成文本与视频生成。支持按 Key 级别计费，调用明细可查。<br><br>Horizon 用户专属福利：通过[专属链接领取 50 元算力金](https://www.ucloud.cn/site/active/astraflow-credit?ytag=geo_waituo_Horizon)，体验模型调用与内容创作。 |
+| [<img src="docs/assets/apixo-logo.png" alt="APIXO" width="220" />](https://apixo.ai/?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon) | APIXO：一站式 AI 图片与视频创作平台<br><br>APIXO 汇集多款 AI 图片与视频模型，无需编程，打开网页即可创作；也支持通过 API 接入自己的应用与自动化工作流。[Seedream 5.5](https://apixo.ai/models/seedream-5-5?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon) 抢先体验，1K 文生图仅 $0.014/张起，享官价七折优惠。优惠自动生效，无需优惠码，让更多创意轻松落地。<br><br>[探索 APIXO 模型与优惠 →](https://apixo.ai/models/seedream-5-5?utm_source=github&utm_medium=sponsorship&utm_campaign=github_readme&utm_content=thysrael_horizon) 活动截至北京时间 2026 年 12 月 31 日 23:59。 |
+
+## Agent Skill
+
+让 AI 助手帮你配置信息源、定制 Profile、生成日报：
+
+```bash
+npx skills add Thysrael/Horizon --skill horizon -g
+```
+
+[安装与使用](docs/agent-skill.md) · [下载 Skill ZIP](https://thysrael.github.io/Horizon/downloads/horizon-skill.zip)
+
+安装命令需要 Node.js 22.20+。装好 Skill 后，可以直接说“帮我安装并配置 Horizon”，也可按下方步骤手动安装。
 
 ## 快速开始
 
@@ -217,17 +175,11 @@ uv pip install --only-binary=:all: openbb openbb-benzinga
 git clone https://github.com/Thysrael/Horizon.git
 cd horizon
 
-# 配置环境
-cp .env.example .env
-cp data/config.example.json data/config.json
-# 编辑 .env 和 data/config.json，填入你的 API 密钥和偏好设置
-
-# 使用 Docker Compose 运行
-docker compose run --rm horizon
-
-# 或自定义时间窗口
-docker compose run --rm horizon --hours 48
+# 可选：首次运行前构建逗号分隔的 extras
+docker compose build --build-arg EXTRAS=openbb horizon
 ```
+
+基础安装已包含 `trafilatura` 全文提取。`twitter` extra 还需要 Playwright 浏览器及系统依赖，当前 Dockerfile 不会安装这些组件。
 
 ### 2. 配置
 
@@ -237,7 +189,9 @@ docker compose run --rm horizon --hours 48
 uv run horizon-wizard
 ```
 
-向导会询问你的兴趣（如"LLM 推理"、"嵌入式"、"web 安全"），自动推荐并生成 `data/config.json`，还可选让 AI 补充推荐小众源。若你想分享信息源，请前往 [horizon1123.top](https://horizon1123.top/)。
+向导会询问你的兴趣（如"LLM 推理"、"嵌入式"、"web 安全"），自动推荐并生成 `data/config.json`，还可选让 AI 补充推荐小众源。若你想分享信息源，请前往 [horizon1123.top](https://horizon1123.top/)。CLI 选项见[交互式向导](docs/configuration.md#interactive-wizard)。
+
+符合条件的 ChatGPT 订阅用户可选择 `openai-chatgpt`，通过[官方登录授权](docs/chatgpt.md)使用订阅额度，无需 OpenAI API Key。
 
 **方式 B：手动配置**
 
@@ -257,14 +211,31 @@ cp data/config.example.json data/config.json  # 自定义信息源
   },
   "sources": {
     "rss": [
-      { "name": "Simon Willison", "url": "https://simonwillison.net/atom/everything/" }
+      {
+        "name": "Simon Willison",
+        "url": "https://simonwillison.net/atom/everything/",
+        "profile": "tech-news"
+      }
     ]
   },
-  "filtering": {
-    "ai_score_threshold": 6.0
+  "processing": {
+    "profiles_dir": "profiles",
+    "default_profile": "tech-news",
+    "profile_settings": {
+      "tech-news": {
+        "threshold": 7.0,
+        "topic_dedup": true
+      }
+    }
   }
 }
 ```
+
+信息源显式指定 `profile` 时会直接使用该 Profile；省略该字段或设为
+`"auto"` 时，AI 会在全部 Profile 中自动匹配。也可设置
+`["tech-news", "finance-news"]`，将匹配范围限定在这些候选项中，每条内容选一个。
+详见 [Profile 指南](docs/profiles.md)。筛选阈值和主题去重等个人偏好配置在
+`processing.profile_settings` 中。
 
 **均衡日报（可选）**
 
@@ -273,8 +244,7 @@ cp data/config.example.json data/config.json  # 自定义信息源
 
 ```jsonc
 {
-  "filtering": {
-    "ai_score_threshold": 6.0,
+  "digest": {
     "max_items": 20,
     "category_groups": {
       "ai": {
@@ -292,8 +262,8 @@ cp data/config.example.json data/config.json  # 自定义信息源
 }
 ```
 
-分组限额在 AI 分数过滤之后、内容补充之前执行。未配置
-`category_groups` 和 `max_items` 时，筛选行为保持不变。
+分组限额在 Profile 筛选之后、内容补充之前执行。未配置
+`category_groups`、`max_items` 和 `default_group_limit` 时，不应用均衡日报限额。
 
 `data/config.json` 里的任意字符串值都可以通过 `${VAR_NAME}` 引用环境变量。这适合用于 `ai.base_url`、私有 RSS 链接、Webhook 地址或自定义请求头模板等字段。
 
@@ -301,25 +271,30 @@ cp data/config.example.json data/config.json  # 自定义信息源
 
 ### 3. 运行
 
-#### 本地安装
+**A. 本地安装**
 
 ```bash
-uv run horizon              # 使用默认 24 小时窗口
-uv run horizon --hours 48   # 抓取最近 48 小时的内容
+uv run horizon [OPTIONS]
 ```
 
-#### 使用 Docker
+**B. Docker**
 
 ```bash
-docker compose run --rm horizon              # 使用默认 24 小时窗口
-docker compose run --rm horizon --hours 48   # 抓取最近 48 小时的内容
+docker compose run --rm horizon [OPTIONS]
 ```
 
-生成的日报将保存在 `data/summaries/` 目录中。
+| 选项 | 默认值 | 说明 |
+|--------|---------|-------------|
+| `--hours N` | 24 | 抓取最近 N 小时的内容 |
+| `-d`, `--data-dir PATH` | `data` | 数据目录路径 |
+| `-c`, `--config PATH` | `<data-dir>/config.json` | 配置文件路径 |
+| `-l`, `--log-level LEVEL` | `WARNING` | 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）|
+
+`--data-dir` 会更改状态目录，包括日报、订阅者文件和默认配置位置；`--config` 只更改配置文件。生成的日报将保存在 `data/summaries/` 目录中（如设置了 `--data-dir`，则保存在 `<data-dir>/summaries/`）。两处位置都要修改，或需要初始化自定义配置位置时，请查看[配置路径](docs/configuration.md#configuration-paths)。
 
 ### 4. 自动化（可选）
 
-Horizon 非常适合作为 **GitHub Actions** 定时任务运行。查看 [`.github/workflows/daily-summary.yml`](.github/workflows/daily-summary.yml) 获取现成的工作流配置，可自动生成日报并部署到 GitHub Pages。
+可使用 **GitHub Actions** 定时运行 Horizon。[每日工作流模板](.github/workflows/daily-summary.yml.disabled) 当前处于禁用状态；根据你的部署配置后，将文件重命名为 `daily-summary.yml` 即可启用。
 
 ## 支持的信息源
 
@@ -329,9 +304,12 @@ Horizon 非常适合作为 **GitHub Actions** 定时任务运行。查看 [`.git
 | **RSS / Atom** | 任意 RSS 或 Atom 订阅源 | — |
 | **Reddit** | Subreddit 帖子 + 用户动态 | 支持（前 N 条评论） |
 | **Telegram** | 公开频道消息 | — |
-| **Twitter / X** | 特定用户的推文 | 支持（前 N 条回复） |
+| **Twitter / X** | 用户推文 + 关键词搜索（Apify） | 支持（前 N 条回复） |
 | **GitHub** | 用户动态 & 仓库 Release | — |
 | **OpenBB** | 按观察列表 / provider 抓取金融公司新闻 | — |
+| **OSS Insight** | 热门开源仓库 | — |
+| **GDELT** | 按查询搜索新闻 | — |
+| **Google News** | 通过 RSS 搜索新闻 | — |
 
 ## 日报可以去哪里
 
@@ -342,29 +320,42 @@ Horizon 支持通过多种方式发布和分发生成的日报：
 | **GitHub Pages 日报站点** | 将生成的 Markdown 复制到 `docs/`，通过 GitHub Pages 发布为每日更新的静态日报站点 |
 | **邮件订阅** | 通过 SMTP/IMAP 向订阅者发送日报，并自动处理订阅/退订请求 |
 | **Webhook 通知** | 在成功或失败时将结果推送到飞书、钉钉、Slack、Discord 或任意 Webhook 端点 |
-| **MCP Server** | 将抓取、打分、过滤、富化、摘要和完整 pipeline 暴露为工具，供 AI 助手调用 |
+| **微信通知** | 通过 iLink Bot 推送日报；扫码登录后向机器人发一条消息即可连接，推送受微信回复额度限制 |
 
-具体配置见[配置指南](docs/configuration.md)。MCP 工具说明和客户端接入见 [`src/mcp/README.md`](src/mcp/README.md) 与 [`src/mcp/integration.md`](src/mcp/integration.md)。
+投递配置见[配置指南](docs/configuration.md)。希望让 AI 助手调用流水线各阶段，可接入 **MCP Server**：[工具说明](src/mcp/README.md) · [客户端接入](src/mcp/integration.md)。
 
 ## 文档
 
 | 文档 | 内容 |
 |------|------|
-| [配置指南](docs/configuration.md) | AI 模型、信息源、过滤、邮件、Webhook、GitHub Pages 和 MCP 配置 |
+| [配置指南](docs/configuration.md) | AI 模型、信息源、Profile、筛选、邮件、Webhook、微信、GitHub Pages 和 MCP 配置 |
+| [Profile 指南](docs/profiles.md) | 内置读法、自定义评分与内容区块、路由和工具权限 |
 | [评分机制](docs/scoring.md) | Horizon 如何评估和排序新闻 |
 | [抓取器](docs/scrapers.md) | 信息源抓取器说明和扩展细节 |
+| [内容提取器](docs/extractors.md) | RSS 信息源的全文提取 |
 | [MCP 工具](src/mcp/README.md) | MCP 客户端可调用的工具说明 |
+| [Agent Skill](docs/agent-skill.md) | 让 AI 助手配置、运行、定制、定时投递和扩展 Horizon |
 
 ## 项目状态
 
-Horizon 已经支持完整的日报流程：多源抓取、AI 打分、去重、背景补充、评论摘要、双语生成、GitHub Pages 发布、邮件分发、Webhook 推送、Docker 部署、MCP 集成和配置向导。
+Horizon 已经支持完整的日报流程：多源抓取、Profile 驱动的分析与内容生成、去重、评论摘要、双语生成、GitHub Pages 发布、邮件分发、Webhook 推送、微信推送、Docker 部署、MCP 集成和配置向导。
 
 计划中的改进：
 
 - 更多信息源类型，例如 Discord
-- 按信息源自定义打分 Prompt
 - 在 GitHub 上发布 Release
 - 发布到 PyPI，支持通过 `pip install` 安装
+
+## 交流群
+
+欢迎加入 Horizon 用户与开发交流群，分享信息源、交流 Profile，或讨论部署和开发。
+
+<p align="center">
+  <img src="docs/assets/qq-group.png" alt="Horizon QQ 群 1106121909 的入群二维码" width="240" height="240" />
+  <br />
+  <strong>QQ 群号：1106121909</strong><br />
+  使用 QQ 扫码，或搜索群号加入。
+</p>
 
 ## 贡献
 

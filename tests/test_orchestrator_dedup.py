@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from src.models import ContentItem, SourceType
+from src.models import ClassificationResult, ContentAnalysis, ContentItem, ProcessingResult, SourceType
 from src.orchestrator import HorizonOrchestrator
 
 
@@ -18,7 +18,10 @@ def make_item(item_id: str, url: str, source: SourceType = SourceType.RSS) -> Co
         title=item_id,
         url=url,
         published_at=datetime.now(timezone.utc),
-        ai_score=9.0,
+        processing=ProcessingResult(
+            classification=ClassificationResult(profile="tech-news", method="source_override"),
+            analysis=ContentAnalysis(score=9.0, reason="test", summary=item_id),
+        ),
     )
 
 

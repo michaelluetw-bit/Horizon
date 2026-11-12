@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timezone
 from time import perf_counter
 from typing import Any, Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
+from rich.console import Console
 
+from .._cli import add_log_level_argument
+from ..logging_config import configure_logging
 from .errors import HorizonMcpError
 from .service import HorizonPipelineService
 
 
+console = Console(stderr=True)
 mcp = FastMCP(name="horizon-mcp")
-service = HorizonPipelineService()
+service = HorizonPipelineService(console=console)
 
 SERVER_STARTED_AT = datetime.now(timezone.utc).isoformat()
 METRICS: dict[str, Any] = {
@@ -103,6 +108,20 @@ async def _run_tool(tool: str, runner: Callable[[], Awaitable[dict[str, Any]]]) 
         payload = _err(tool, exc, duration_ms=elapsed_ms)
         code = payload["error"]["code"]
         _record_metrics(tool, ok=False, duration_ms=elapsed_ms, error_code=code)
+        return payload
+
+
+def _run_sync_tool(tool: str, runner: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    started = perf_counter()
+    try:
+        data = runner()
+        elapsed_ms = (perf_counter() - started) * 1000
+        _record_metrics(tool, ok=True, duration_ms=elapsed_ms)
+        return _ok(tool, data, duration_ms=elapsed_ms)
+    except Exception as exc:
+        elapsed_ms = (perf_counter() - started) * 1000
+        payload = _err(tool, exc, duration_ms=elapsed_ms)
+        _record_metrics(tool, ok=False, duration_ms=elapsed_ms, error_code=payload["error"]["code"])
         return payload
 
 
@@ -266,7 +285,7 @@ async def hz_run_pipeline(
     horizon_path: str | None = None,
     config_path: str | None = None,
     sources: list[str] | None = None,
-    enrich: bool = False,
+    enrich: bool = True,
     topic_dedup: bool = True,
     save_to_horizon_data: bool = False,
 ) -> dict[str, Any]:
@@ -292,110 +311,39 @@ async def hz_run_pipeline(
 def hz_list_runs(limit: int = 20) -> dict[str, Any]:
     """List recent runs and stage states."""
 
-    started = perf_counter()
-    try:
-        data = service.list_runs(limit=limit)
-        elapsed_ms = (perf_counter() - started) * 1000
-        _record_metrics("hz_list_runs", ok=True, duration_ms=elapsed_ms)
-        return _ok("hz_list_runs", data, duration_ms=elapsed_ms)
-    except Exception as exc:
-        elapsed_ms = (perf_counter() - started) * 1000
-        payload = _err("hz_list_runs", exc, duration_ms=elapsed_ms)
-        _record_metrics(
-            "hz_list_runs",
-            ok=False,
-            duration_ms=elapsed_ms,
-            error_code=payload["error"]["code"],
-        )
-        return payload
+    return _run_sync_tool("hz_list_runs", lambda: service.list_runs(limit=limit))
 
 
 @mcp.tool()
 def hz_get_run_meta(run_id: str) -> dict[str, Any]:
     """Read run metadata."""
 
-    started = perf_counter()
-    try:
-        data = service.get_run_meta(run_id)
-        elapsed_ms = (perf_counter() - started) * 1000
-        _record_metrics("hz_get_run_meta", ok=True, duration_ms=elapsed_ms)
-        return _ok("hz_get_run_meta", data, duration_ms=elapsed_ms)
-    except Exception as exc:
-        elapsed_ms = (perf_counter() - started) * 1000
-        payload = _err("hz_get_run_meta", exc, duration_ms=elapsed_ms)
-        _record_metrics(
-            "hz_get_run_meta",
-            ok=False,
-            duration_ms=elapsed_ms,
-            error_code=payload["error"]["code"],
-        )
-        return payload
+    return _run_sync_tool("hz_get_run_meta", lambda: service.get_run_meta(run_id))
 
 
 @mcp.tool()
 def hz_get_run_stage(run_id: str, stage: str, max_items: int = 200) -> dict[str, Any]:
     """Read items from a run stage."""
 
-    started = perf_counter()
-    try:
-        data = service.get_run_stage(run_id=run_id, stage=stage, max_items=max_items)
-        elapsed_ms = (perf_counter() - started) * 1000
-        _record_metrics("hz_get_run_stage", ok=True, duration_ms=elapsed_ms)
-        return _ok("hz_get_run_stage", data, duration_ms=elapsed_ms)
-    except Exception as exc:
-        elapsed_ms = (perf_counter() - started) * 1000
-        payload = _err("hz_get_run_stage", exc, duration_ms=elapsed_ms)
-        _record_metrics(
-            "hz_get_run_stage",
-            ok=False,
-            duration_ms=elapsed_ms,
-            error_code=payload["error"]["code"],
-        )
-        return payload
+    return _run_sync_tool(
+        "hz_get_run_stage", lambda: service.get_run_stage(run_id=run_id, stage=stage, max_items=max_items)
+    )
 
 
 @mcp.tool()
 def hz_get_run_summary(run_id: str, language: str = "zh") -> dict[str, Any]:
     """Read a generated run summary."""
 
-    started = perf_counter()
-    try:
-        data = service.get_run_summary(run_id=run_id, language=language)
-        elapsed_ms = (perf_counter() - started) * 1000
-        _record_metrics("hz_get_run_summary", ok=True, duration_ms=elapsed_ms)
-        return _ok("hz_get_run_summary", data, duration_ms=elapsed_ms)
-    except Exception as exc:
-        elapsed_ms = (perf_counter() - started) * 1000
-        payload = _err("hz_get_run_summary", exc, duration_ms=elapsed_ms)
-        _record_metrics(
-            "hz_get_run_summary",
-            ok=False,
-            duration_ms=elapsed_ms,
-            error_code=payload["error"]["code"],
-        )
-        return payload
+    return _run_sync_tool(
+        "hz_get_run_summary", lambda: service.get_run_summary(run_id=run_id, language=language)
+    )
 
 
 @mcp.tool()
 def hz_get_metrics() -> dict[str, Any]:
     """Read in-memory server metrics."""
 
-    started = perf_counter()
-    try:
-        data = _metrics_snapshot()
-        elapsed_ms = (perf_counter() - started) * 1000
-        _record_metrics("hz_get_metrics", ok=True, duration_ms=elapsed_ms)
-        return _ok("hz_get_metrics", data, duration_ms=elapsed_ms)
-    except Exception as exc:
-        elapsed_ms = (perf_counter() - started) * 1000
-        payload = _err("hz_get_metrics", exc, duration_ms=elapsed_ms)
-        _record_metrics(
-            "hz_get_metrics",
-            ok=False,
-            duration_ms=elapsed_ms,
-            error_code=payload["error"]["code"],
-        )
-        return payload
+    return _run_sync_tool("hz_get_metrics", _metrics_snapshot)
 
 
 @mcp.tool()
@@ -496,6 +444,11 @@ def r_effective_config() -> dict[str, Any]:
 
 def main() -> None:
     """Run MCP server over stdio."""
+    parser = argparse.ArgumentParser(description="Horizon MCP server")
+    add_log_level_argument(parser, default="INFO")
+    args = parser.parse_args()
+
+    configure_logging(console, level=args.log_level)
 
     mcp.run()
 
