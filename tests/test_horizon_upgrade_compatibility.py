@@ -9,12 +9,13 @@ def test_chinese_output_is_traditional():
     assert normalize_language("English title", "en") == "English title"
 
 
-def test_cloud_config_keeps_existing_languages_threshold_and_sources():
+def test_cloud_config_keeps_languages_and_sources_with_top_ten_digest():
     path = Path(__file__).resolve().parents[1] / "data" / "config.github.json"
     config = Config.model_validate_json(path.read_text(encoding="utf-8"))
 
     assert config.ai.languages == ["zh", "en"]
-    assert config.processing.profile_settings["tech-news"].threshold == 8.0
+    assert config.processing.profile_settings["tech-news"].threshold == 0.0
+    assert config.digest.max_items == 10
     assert {source.name for source in config.sources.rss} == {
         "Simon Willison",
         "GitHub Trending - Daily",
