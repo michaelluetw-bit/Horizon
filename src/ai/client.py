@@ -707,12 +707,12 @@ def _create_chained_client(config: AIConfig) -> ChainedAIClient:
         base_url = config.base_url if provider == config.provider else defaults.get("base_url")
         cfg = AIConfig(
             provider=provider,
-            model=(
-                config.model
-                if provider == config.provider and provider in {AIProvider.MINIMAX, AIProvider.OPENAI_CHATGPT}
-                else defaults.get("model", config.model)
+            model=config.model if provider == config.provider else defaults.get("model", config.model),
+            api_key_env=(
+                config.api_key_env
+                if provider == config.provider
+                else defaults.get("api_key_env", config.api_key_env)
             ),
-            api_key_env=defaults.get("api_key_env", config.api_key_env),
             chatgpt_account=config.chatgpt_account if provider == AIProvider.OPENAI_CHATGPT else None,
             base_url=base_url,
             extra_body=config.extra_body if provider == config.provider else None,

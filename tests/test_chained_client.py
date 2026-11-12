@@ -250,6 +250,20 @@ def test_create_chained_client_preserves_custom_azure_and_common_settings():
         assert entry.languages == ["ja", "en-US"]
 
 
+def test_create_chained_client_preserves_minimax_custom_key():
+    config = AIConfig(
+        provider=AIProvider.MINIMAX,
+        provider_chain="minimax,openai",
+        model="custom-minimax",
+        api_key_env="CUSTOM_MINIMAX_KEY",
+    )
+
+    minimax = _create_chained_client(config).configs[0]
+
+    assert minimax.model == "custom-minimax"
+    assert minimax.api_key_env == "CUSTOM_MINIMAX_KEY"
+
+
 def test_create_chained_client_applies_azure_connection_defaults():
     config = AIConfig(
         provider=AIProvider.OPENAI,
