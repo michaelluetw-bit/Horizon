@@ -198,8 +198,10 @@ def test_create_chained_client_uses_provider_defaults_without_leaking_base_url()
     assert [entry.provider for entry in chained.configs] == providers
     for entry in chained.configs:
         defaults = AI_PROVIDER_DEFAULTS[entry.provider]
-        assert entry.model == defaults["model"]
-        assert entry.api_key_env == defaults["api_key_env"]
+        assert entry.model == (config.model if entry.provider == config.provider else defaults["model"])
+        assert entry.api_key_env == (
+            config.api_key_env if entry.provider == config.provider else defaults["api_key_env"]
+        )
         expected_base_url = (
             config.base_url
             if entry.provider == config.provider
@@ -233,6 +235,8 @@ def test_create_chained_client_preserves_custom_azure_and_common_settings():
 
     azure, openai = _create_chained_client(config).configs
 
+    assert azure.model == "custom-deployment"
+    assert azure.api_key_env == "CUSTOM_AZURE_API_KEY"
     assert azure.azure_endpoint_env == "CUSTOM_AZURE_ENDPOINT"
     assert azure.api_version == "2025-01-01-preview"
     assert openai.azure_endpoint_env is None
@@ -244,6 +248,20 @@ def test_create_chained_client_preserves_custom_azure_and_common_settings():
         assert entry.analysis_concurrency == 4
         assert entry.enrichment_concurrency == 6
         assert entry.languages == ["ja", "en-US"]
+
+
+def test_create_chained_client_preserves_minimax_custom_key():
+    config = AIConfig(
+        provider=AIProvider.MINIMAX,
+        provider_chain="minimax,openai",
+        model="custom-minimax",
+        api_key_env="CUSTOM_MINIMAX_KEY",
+    )
+
+    minimax = _create_chained_client(config).configs[0]
+
+    assert minimax.model == "custom-minimax"
+    assert minimax.api_key_env == "CUSTOM_MINIMAX_KEY"
 
 
 def test_create_chained_client_applies_azure_connection_defaults():

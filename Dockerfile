@@ -33,10 +33,6 @@ RUN set -eu; \
 RUN useradd --create-home --uid 10001 horizon \
     && chown -R horizon:horizon /app
 
-# Create non-root user for security
-RUN useradd -m -r appuser && chown -R appuser:appuser /app
-USER appuser
-
 # Create volume mount points
 VOLUME ["/app/data"]
 

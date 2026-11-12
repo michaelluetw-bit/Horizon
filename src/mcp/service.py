@@ -558,6 +558,25 @@ class HorizonPipelineService:
             config_path=config_path,
         )
 
+        if self.run_store.load_meta(run_id).get("enrichment_status") == "failure":
+            raise HorizonMcpError(
+                code="HZ_ENRICHMENT_FAILED",
+                message="Enrichment failed for all selected items.",
+                details={"run_id": run_id},
+            )
+        if stage == "enriched":
+            localized = [
+                item for item in items
+                if item.processing and language in item.processing.artifacts
+            ]
+            if items and not localized:
+                raise HorizonMcpError(
+                    code="HZ_ENRICHMENT_FAILED",
+                    message=f"No enriched items are available for language={language}.",
+                    details={"run_id": run_id, "language": language},
+                )
+            items = localized
+
         total_fetched = self._total_fetched(run_id, fallback=len(items))
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -643,8 +662,13 @@ class HorizonPipelineService:
                 horizon_path=horizon_path,
                 config_path=config_path,
             )
-            if enrich_result["status"] != "failure":
-                stage_for_summary = "enriched"
+            if enrich_result["status"] == "failure":
+                raise HorizonMcpError(
+                    code="HZ_ENRICHMENT_FAILED",
+                    message="Enrichment failed for all selected items.",
+                    details={"run_id": run_id, "failed_ids": enrich_result["failed_ids"]},
+                )
+            stage_for_summary = "enriched"
 
         ctx, _, _ = self._build_context(
             horizon_path=horizon_path,
