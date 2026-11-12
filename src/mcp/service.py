@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from rich.console import Console
+
+from ..ai.summarizer import DailySummarizer
+from ..ai.errors import AIProviderUnavailableError
+from ..collection_window import collection_hours
+from ..models import AIProvider, Config, ContentItem
+from ..orchestrator import HorizonOrchestrator
+from ..processing import ProfileRegistry
 from .errors import HorizonMcpError
 from .horizon_adapter import (
     apply_source_filter,
@@ -16,14 +26,61 @@ from .horizon_adapter import (
     get_source_counts,
     items_to_dicts,
     load_config,
-    load_runtime,
-    make_orchestrator,
+    load_environment,
     make_storage,
     resolve_config_path,
     resolve_horizon_path,
 )
 from .run_store import RunStore
 from ..services.webhook import WebhookNotifier
+
+
+_REDACTED = "<redacted>"
+_SENSITIVE_NAME = re.compile(
+    r"(?:^|[-_])(authorization|cookie|credential|key|password|secret|signature|token|api[-_]?key)(?:$|[-_])",
+    re.IGNORECASE,
+)
+
+
+def _redact_config(value: Any, key: str = "") -> Any:
+    """Redact secrets from expanded config while preserving its structure."""
+    if key.lower().endswith("_env"):
+        return value
+    if _SENSITIVE_NAME.search(key):
+        return _REDACTED
+    if isinstance(value, dict):
+        return {item_key: _redact_config(item, str(item_key)) for item_key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_config(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    lines = value.splitlines()
+    if any(":" in line for line in lines):
+        redacted_lines = []
+        for line in lines:
+            name, separator, header_value = line.partition(":")
+            if separator and _SENSITIVE_NAME.search(name.strip()):
+                line = f"{name}:{' ' if header_value.startswith(' ') else ''}{_REDACTED}"
+            redacted_lines.append(line)
+        value = "\n".join(redacted_lines)
+
+    try:
+        parts = urlsplit(value)
+        if parts.scheme in {"http", "https"} and parts.netloc:
+            netloc = parts.netloc
+            if parts.username is not None or parts.password is not None:
+                netloc = f"{_REDACTED}@{parts.hostname or ''}"
+                if parts.port is not None:
+                    netloc += f":{parts.port}"
+            query = [
+                (name, _REDACTED if _SENSITIVE_NAME.search(name) else item_value)
+                for name, item_value in parse_qsl(parts.query, keep_blank_values=True)
+            ]
+            value = urlunsplit(parts._replace(netloc=netloc, query=urlencode(query)))
+    except ValueError:
+        pass
+    return value
 
 
 def _default_runs_root() -> Path:
@@ -36,15 +93,19 @@ class PipelineContext:
 
     horizon_path: Path
     config_path: Path
-    runtime: Any
-    config: Any
+    config: Config
 
 
 class HorizonPipelineService:
     """High-level staged pipeline service."""
 
-    def __init__(self, runs_root: Path | None = None):
+    def __init__(
+        self,
+        runs_root: Path | None = None,
+        console: Console | None = None,
+    ):
         self.runs_root = Path(runs_root).resolve() if runs_root else _default_runs_root().resolve()
+        self.console = console or Console(stderr=True)
         self._run_store: RunStore | None = None
 
     @property
@@ -155,7 +216,7 @@ class HorizonPipelineService:
             "config_path": str(ctx.config_path),
             "selected_sources": selected_sources,
             "unknown_sources": unknown_sources,
-            "config": ctx.config.model_dump(mode="json"),
+            "config": _redact_config(ctx.config.model_dump(mode="json")),
         }
 
     async def validate_config(
@@ -171,11 +232,32 @@ class HorizonPipelineService:
             sources=sources,
         )
 
+        try:
+            self._profiles(ctx).validate_digest_references(ctx.config.digest)
+        except ValueError as exc:
+            raise HorizonMcpError(
+                code="HZ_CONFIG_INVALID",
+                message="Config references unknown processing profiles.",
+                details={"config_path": str(ctx.config_path), "error": str(exc)},
+            ) from exc
+
         warnings: list[str] = []
         missing_env: list[str] = []
+        auth_status: dict | None = None
 
         if check_env:
-            required = [ctx.config.ai.api_key_env]
+            required = []
+            if ctx.config.ai.provider == AIProvider.OPENAI_CHATGPT:
+                from ..ai.chatgpt_auth import ChatGPTAuth
+                try:
+                    auth_status = ChatGPTAuth().status(ctx.config.ai.chatgpt_account)
+                except (AIProviderUnavailableError, OSError) as exc:
+                    auth_status = {"connected": False, "plan_usage": False}
+                    warnings.append(str(exc))
+                if not auth_status["plan_usage"]:
+                    warnings.append("ChatGPT plan usage is not connected; run horizon-chatgpt login.")
+            elif ctx.config.ai.provider != AIProvider.OLLAMA:
+                required.append(ctx.config.ai.api_key_env)
             for key in required:
                 if not os.getenv(key):
                     missing_env.append(key)
@@ -200,19 +282,27 @@ class HorizonPipelineService:
                 "model": ctx.config.ai.model,
                 "languages": list(ctx.config.ai.languages),
                 "api_key_env": ctx.config.ai.api_key_env,
+                **({"auth": auth_status} if auth_status is not None else {}),
             },
-            "filtering": {
-                "ai_score_threshold": ctx.config.filtering.ai_score_threshold,
-                "time_window_hours": ctx.config.filtering.time_window_hours,
-                "max_items": ctx.config.filtering.max_items,
+            "collection": {
+                "time_window_hours": ctx.config.collection.time_window_hours,
+            },
+            "digest": {
+                "max_items": ctx.config.digest.max_items,
+                "profile_order": list(ctx.config.digest.profile_order),
                 "category_groups": {
                     key: group.model_dump(mode="json")
-                    for key, group in ctx.config.filtering.category_groups.items()
+                    for key, group in ctx.config.digest.category_groups.items()
                 },
-                "default_group": ctx.config.filtering.default_group,
-                "default_group_limit": ctx.config.filtering.default_group_limit,
+                "group_by": ctx.config.digest.group_by,
+                "default_group": ctx.config.digest.default_group,
+                "default_group_limit": ctx.config.digest.default_group_limit,
             },
             "enabled_sources": get_enabled_sources(ctx.config),
+            "processing": {
+                "profiles_dir": ctx.config.processing.profiles_dir,
+                "default_profile": ctx.config.processing.default_profile,
+            },
             "selected_sources": selected_sources,
             "unknown_sources": unknown_sources,
             "missing_env": missing_env,
@@ -227,8 +317,10 @@ class HorizonPipelineService:
         config_path: str | None = None,
         sources: list[str] | None = None,
     ) -> dict[str, Any]:
-        if hours <= 0:
-            raise HorizonMcpError(code="HZ_INVALID_INPUT", message="hours must be greater than 0.")
+        try:
+            hours = collection_hours(hours)
+        except ValueError as exc:
+            raise HorizonMcpError(code="HZ_INVALID_INPUT", message=f"{exc}.") from exc
 
         ctx, selected_sources, unknown_sources = self._build_context(
             horizon_path=horizon_path,
@@ -236,31 +328,33 @@ class HorizonPipelineService:
             sources=sources,
         )
 
-        storage = make_storage(ctx.runtime, ctx.config_path)
-        orchestrator = make_orchestrator(ctx.runtime, ctx.config, storage)
+        orchestrator = self._orchestrator(ctx)
 
         run_id = self.run_store.create_run(run_id)
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
         raw_items = await orchestrator.fetch_all_sources(since)
         merged_items = orchestrator.merge_cross_source_duplicates(raw_items)
+        report = orchestrator.last_fetch_report
+        fetch_report = report.to_dict() if report is not None else None
 
         self.run_store.save_items(run_id, "raw", items_to_dicts(merged_items))
-        meta = self.run_store.update_meta(
-            run_id,
-            {
-                "horizon_path": str(ctx.horizon_path),
-                "config_path": str(ctx.config_path),
-                "hours": hours,
-                "since": since.isoformat(),
-                "source_selection": selected_sources,
-                "unknown_sources": unknown_sources,
-                "raw_count_before_merge": len(raw_items),
-                "raw_count": len(merged_items),
-            },
-        )
+        meta_updates = {
+            "horizon_path": str(ctx.horizon_path),
+            "config_path": str(ctx.config_path),
+            "hours": hours,
+            "since": since.isoformat(),
+            "source_selection": selected_sources,
+            "unknown_sources": unknown_sources,
+            "raw_count_before_merge": len(raw_items),
+            "raw_count": len(merged_items),
+        }
+        if fetch_report is not None:
+            meta_updates["fetch_status"] = fetch_report.get("status")
+            meta_updates["fetch_report"] = fetch_report
+        meta = self.run_store.update_meta(run_id, meta_updates)
 
-        return {
+        response = {
             "run_id": run_id,
             "fetched": len(merged_items),
             "raw_before_merge": len(raw_items),
@@ -268,6 +362,10 @@ class HorizonPipelineService:
             "artifact": str((self.run_store.run_dir(run_id) / "raw_items.json").resolve()),
             "meta": meta,
         }
+        if fetch_report is not None:
+            response["fetch_status"] = fetch_report.get("status")
+            response["fetch_report"] = fetch_report
+        return response
 
     async def score_items(
         self,
@@ -286,27 +384,27 @@ class HorizonPipelineService:
         if not items:
             raise HorizonMcpError(code="HZ_EMPTY_INPUT", message="No items available for scoring.")
 
-        ai_client = ctx.runtime.create_ai_client(ctx.config.ai)
-        analyzer = ctx.runtime.ContentAnalyzer(ai_client)
-        scored_items = await analyzer.analyze_batch(items)
+        self._bind_chatgpt_account(ctx, run_id)
+        orchestrator = self._orchestrator(ctx)
+        scored_items = await orchestrator.analyze_items(items)
 
         self.run_store.save_items(run_id, "scored", items_to_dicts(scored_items))
-        score_threshold = ctx.config.filtering.ai_score_threshold
-        above_threshold = [x for x in scored_items if x.ai_score and x.ai_score >= score_threshold]
+        selected = [
+            item for item in scored_items if orchestrator.passes_profile_filter(item)
+        ]
 
         meta = self.run_store.update_meta(
             run_id,
             {
                 "scored_count": len(scored_items),
-                "scored_threshold": score_threshold,
-                "scored_above_threshold": len(above_threshold),
+                "selected_count": len(selected),
             },
         )
 
         return {
             "run_id": run_id,
             "scored": len(scored_items),
-            "above_threshold": len(above_threshold),
+            "selected": len(selected),
             "score_distribution": self._score_distribution(scored_items),
             "artifact": str((self.run_store.run_dir(run_id) / "scored_items.json").resolve()),
             "meta": meta,
@@ -328,56 +426,55 @@ class HorizonPipelineService:
             config_path=config_path,
         )
 
-        effective_threshold = threshold if threshold is not None else ctx.config.filtering.ai_score_threshold
-
-        important_items = [item for item in items if item.ai_score and item.ai_score >= effective_threshold]
-        important_items.sort(key=lambda x: x.ai_score or 0, reverse=True)
-
-        before_dedup = len(important_items)
-        orchestrator = None
-        if topic_dedup and important_items:
-            storage = make_storage(ctx.runtime, ctx.config_path)
-            orchestrator = make_orchestrator(ctx.runtime, ctx.config, storage)
-            important_items = await orchestrator.merge_topic_duplicates(important_items)
-        after_dedup = len(important_items)
-
-        filtering = ctx.config.filtering
-        balanced_enabled = bool(
-            getattr(filtering, "category_groups", {})
-            or getattr(filtering, "max_items", None) is not None
+        if topic_dedup and len(items) > 1:
+            self._bind_chatgpt_account(ctx, run_id)
+        orchestrator = self._orchestrator(ctx)
+        filtering_result = await orchestrator.select_digest_items(
+            items,
+            threshold=threshold,
+            topic_dedup=topic_dedup,
+            log=False,
         )
-        balanced_group_counts: dict[str, int] = {}
-        if balanced_enabled:
-            if orchestrator is None:
-                storage = make_storage(ctx.runtime, ctx.config_path)
-                orchestrator = make_orchestrator(ctx.runtime, ctx.config, storage)
-            balanced_result = orchestrator.apply_balanced_digest(
-                important_items,
-                log=False,
-            )
-            important_items = balanced_result.items
-            balanced_group_counts = balanced_result.group_counts
+        important_items = filtering_result.items
+        balanced_result = filtering_result.balanced_digest
+        balanced_enabled = balanced_result.enabled
+        balanced_group_counts = balanced_result.group_counts
+        eligible_count = (
+            filtering_result.eligible_count
+            if filtering_result.eligible_count is not None
+            else filtering_result.topic_dedup_count
+        )
 
         self.run_store.save_items(run_id, "filtered", items_to_dicts(important_items))
         meta = self.run_store.update_meta(
             run_id,
             {
                 "filtered_count": len(important_items),
-                "filter_threshold": effective_threshold,
+                "filter_threshold_override": threshold,
                 "topic_dedup_enabled": topic_dedup,
-                "topic_dedup_removed": before_dedup - after_dedup,
+                "topic_dedup_removed": filtering_result.topic_dedup_removed,
+                "reanalysis_filtered_count": (
+                    filtering_result.topic_dedup_count - eligible_count
+                ),
                 "balanced_digest_enabled": balanced_enabled,
                 "balanced_digest_group_counts": balanced_group_counts,
-                "balanced_digest_removed": after_dedup - len(important_items),
+                "balanced_digest_removed": (
+                    eligible_count - len(important_items)
+                ),
             },
         )
 
         return {
             "run_id": run_id,
             "kept": len(important_items),
-            "threshold": effective_threshold,
-            "removed_by_topic_dedup": before_dedup - after_dedup,
-            "removed_by_balanced_digest": after_dedup - len(important_items),
+            "threshold_override": threshold,
+            "removed_by_topic_dedup": filtering_result.topic_dedup_removed,
+            "removed_after_reanalysis": (
+                filtering_result.topic_dedup_count - eligible_count
+            ),
+            "removed_by_balanced_digest": (
+                eligible_count - len(important_items)
+            ),
             "balanced_digest_enabled": balanced_enabled,
             "group_counts": balanced_group_counts,
             "source_counts": get_source_counts(important_items),
@@ -402,23 +499,45 @@ class HorizonPipelineService:
         if not items:
             raise HorizonMcpError(code="HZ_EMPTY_INPUT", message="No items available for enrichment.")
 
-        # Second-pass enrichment is disabled, save directly to maintain pipeline compatibility
-        self.run_store.save_items(run_id, "enriched", items_to_dicts(items))
+        self._bind_chatgpt_account(ctx, run_id)
+        orchestrator = self._orchestrator(ctx)
+        enrichment_result = await orchestrator.enrich_items(items)
+
+        artifact_path = None
+        if enrichment_result.status == "failure":
+            self.run_store.invalidate_from(run_id, "enriched")
+        else:
+            artifact_path = self.run_store.save_items(
+                run_id, "enriched", items_to_dicts(items)
+            )
+
+        citation_count = 0
+        for item in items:
+            if item.processing:
+                citation_count += sum(
+                    len(artifact.sources)
+                    for artifact in item.processing.artifacts.values()
+                )
 
         meta = self.run_store.update_meta(
             run_id,
             {
-                "enriched_count": len(items),
-                "citation_count": 0,
-                "enrichment_skipped": True,
+                "enrichment_status": enrichment_result.status,
+                "enriched_count": enrichment_result.succeeded_count,
+                "enrichment_failed_count": enrichment_result.failed_count,
+                "enrichment_failed_ids": enrichment_result.failed_ids,
+                "citation_count": citation_count,
             },
         )
 
         return {
             "run_id": run_id,
-            "enriched": len(items),
-            "citation_count": 0,
-            "artifact": str((self.run_store.run_dir(run_id) / "enriched_items.json").resolve()),
+            "status": enrichment_result.status,
+            "enriched": enrichment_result.succeeded_count,
+            "failed": enrichment_result.failed_count,
+            "failed_ids": enrichment_result.failed_ids,
+            "citation_count": citation_count,
+            "artifact": str(artifact_path.resolve()) if artifact_path else None,
             "meta": meta,
         }
 
@@ -442,7 +561,10 @@ class HorizonPipelineService:
         total_fetched = self._total_fetched(run_id, fallback=len(items))
         date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        summarizer = ctx.runtime.DailySummarizer()
+        summarizer = DailySummarizer(
+            profile_names=self._profiles(ctx).names,
+            profile_order=ctx.config.digest.profile_order,
+        )
         summary = await summarizer.generate_summary(
             items,
             date_str,
@@ -453,7 +575,7 @@ class HorizonPipelineService:
         run_summary_path = self.run_store.save_summary(run_id, language, summary)
         published_path = None
         if save_to_horizon_data:
-            storage = make_storage(ctx.runtime, ctx.config_path)
+            storage = make_storage(ctx.config_path)
             published_path = storage.save_daily_summary(date_str, summary, language=language)
 
         summary_meta = {
@@ -486,7 +608,7 @@ class HorizonPipelineService:
         horizon_path: str | None = None,
         config_path: str | None = None,
         sources: list[str] | None = None,
-        enrich: bool = False,
+        enrich: bool = True,
         topic_dedup: bool = True,
         save_to_horizon_data: bool = False,
     ) -> dict[str, Any]:
@@ -514,14 +636,15 @@ class HorizonPipelineService:
 
         enrich_result: dict[str, Any] | None = None
         stage_for_summary = "filtered"
-        if enrich:
+        if enrich and filter_result["kept"] > 0:
             enrich_result = await self.enrich_items(
                 run_id=run_id,
                 source_stage="filtered",
                 horizon_path=horizon_path,
                 config_path=config_path,
             )
-            stage_for_summary = "enriched"
+            if enrich_result["status"] != "failure":
+                stage_for_summary = "enriched"
 
         ctx, _, _ = self._build_context(
             horizon_path=horizon_path,
@@ -559,16 +682,15 @@ class HorizonPipelineService:
         sources: list[str] | None,
     ) -> tuple[PipelineContext, list[str], list[str]]:
         resolved_horizon = resolve_horizon_path(horizon_path)
-        runtime = load_runtime(resolved_horizon)
+        load_environment(resolved_horizon)
         resolved_config = resolve_config_path(resolved_horizon, config_path)
-        config = load_config(runtime, resolved_config)
+        config = load_config(resolved_config)
         effective_config, selected_sources, unknown_sources = apply_source_filter(config, sources)
 
         return (
             PipelineContext(
                 horizon_path=resolved_horizon,
                 config_path=resolved_config,
-                runtime=runtime,
                 config=effective_config,
             ),
             selected_sources,
@@ -581,7 +703,7 @@ class HorizonPipelineService:
         stage: str,
         horizon_path: str | None,
         config_path: str | None,
-    ) -> tuple[list[Any], PipelineContext]:
+    ) -> tuple[list[ContentItem], PipelineContext]:
         ctx, _, _ = self._build_context(horizon_path=horizon_path, config_path=config_path, sources=None)
         try:
             payload = self.run_store.load_items(run_id, stage)
@@ -591,8 +713,31 @@ class HorizonPipelineService:
                 message=f"run_id={run_id} is missing stage artifact: {stage}",
                 details={"run_id": run_id, "stage": stage},
             ) from exc
-        items = dicts_to_items(ctx.runtime, payload)
+        items = dicts_to_items(payload)
         return items, ctx
+
+    def _bind_chatgpt_account(self, ctx: PipelineContext, run_id: str) -> None:
+        """Persist only the selected registration ID across separate MCP stages."""
+        if ctx.config.ai.provider != AIProvider.OPENAI_CHATGPT:
+            return
+        from ..ai.chatgpt_auth import ChatGPTAuth
+        meta = self.run_store.load_meta(run_id)
+        account = meta.get("chatgpt_account") or ctx.config.ai.chatgpt_account
+        session = ChatGPTAuth().status(account)
+        if not session["plan_usage"]:
+            raise AIProviderUnavailableError("ChatGPT plan usage is not connected. Run horizon-chatgpt login.")
+        ctx.config.ai.chatgpt_account = session["client_id"]
+        if not meta.get("chatgpt_account"):
+            self.run_store.update_meta(run_id, {"chatgpt_account": session["client_id"]})
+
+    def _orchestrator(self, ctx: PipelineContext) -> HorizonOrchestrator:
+        storage = make_storage(ctx.config_path)
+        return HorizonOrchestrator(
+            ctx.config,
+            storage,
+            console=self.console,
+            profiles=self._profiles(ctx),
+        )
 
     def _pick_summary_stage(self, run_id: str) -> str:
         for stage in ("enriched", "filtered", "scored", "raw"):
@@ -612,10 +757,22 @@ class HorizonPipelineService:
             return fallback
 
     @staticmethod
-    def _score_distribution(items: list[Any]) -> dict[str, int]:
-        buckets = {"0-2": 0, "3-4": 0, "5-6": 0, "7-8": 0, "9-10": 0}
+    def _profiles(ctx: PipelineContext) -> ProfileRegistry:
+        return ProfileRegistry.load(
+            Path(ctx.config.processing.profiles_dir).expanduser(),
+            ctx.config.processing.default_profile,
+            base_dir=ctx.horizon_path,
+        )
+
+    @staticmethod
+    def _score_distribution(items: list[ContentItem]) -> dict[str, int]:
+        buckets = {"unscored": 0, "0-2": 0, "3-4": 0, "5-6": 0, "7-8": 0, "9-10": 0}
         for item in items:
-            score = float(item.ai_score or 0.0)
+            analysis = item.processing.analysis if item.processing else None
+            if not analysis or analysis.score is None:
+                buckets["unscored"] += 1
+                continue
+            score = float(analysis.score)
             if score < 3:
                 buckets["0-2"] += 1
             elif score < 5:
@@ -648,13 +805,14 @@ class HorizonPipelineService:
         )
 
         webhook_config = ctx.config.webhook
-        if not webhook_config or not webhook_config.enabled:
+        if not webhook_config:
             return {
                 "sent": False,
-                "reason": "Webhook is not enabled in configuration.",
+                "status": "disabled",
+                "reason": "Webhook is not configured.",
             }
 
-        notifier = WebhookNotifier(webhook_config)
+        notifier = WebhookNotifier(webhook_config, console=self.console)
         variables = {
             "date": date,
             "language": language,
@@ -667,9 +825,9 @@ class HorizonPipelineService:
             "summary": summary,
         }
 
-        await notifier.notify(variables)
+        delivery = await notifier.notify(variables)
 
         return {
-            "sent": True,
+            **delivery.to_dict(),
             "variables": {k: (v if k != "summary" else f"<{len(v)} chars>") for k, v in variables.items()},
         }

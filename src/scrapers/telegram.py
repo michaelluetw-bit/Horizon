@@ -2,19 +2,27 @@
 
 import asyncio
 import logging
+import math
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import List, Optional
+from urllib.parse import urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
 
-from .base import BaseScraper
+from .base import BaseScraper, FetchResult
 from ..models import ContentItem, TelegramConfig, TelegramChannelConfig, SourceType
 
 logger = logging.getLogger(__name__)
 
-TELEGRAM_WEB_BASE = "https://t.me/s"
+TELEGRAM_WEB_BASES = (
+    "https://telegram.me/s",
+    "https://telegram.dog/s",
+    "https://t.me/s",
+)
+TELEGRAM_LINK_BASE = "https://telegram.me"
 USER_AGENT = "Mozilla/5.0 (compatible; Horizon/1.0; +https://github.com/thysrael/horizon)"
 
 
@@ -25,43 +33,59 @@ class TelegramScraper(BaseScraper):
         super().__init__(config.model_dump(), http_client)
         self.telegram_config = config
 
-    async def fetch(self, since: datetime) -> List[ContentItem]:
+    async def fetch(self, since: datetime) -> FetchResult:
+        result = FetchResult()
         if not self.config.get("enabled", True):
-            return []
+            return result
 
         tasks = []
         for channel_cfg in self.telegram_config.channels:
             if channel_cfg.enabled:
-                tasks.append(self._fetch_channel(channel_cfg, since))
+                tasks.append(result.collect(channel_cfg.channel, self._fetch_channel(channel_cfg, since)))
 
-        if not tasks:
-            return []
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        items = []
-        for result in results:
-            if isinstance(result, Exception):
-                logger.warning("Error fetching Telegram channel: %s", result)
-            elif isinstance(result, list):
-                items.extend(result)
-        return items
+        await asyncio.gather(*tasks)
+        return result
 
     async def _fetch_channel(self, cfg: TelegramChannelConfig, since: datetime) -> List[ContentItem]:
-        url = f"{TELEGRAM_WEB_BASE}/{cfg.channel}"
         headers = {"User-Agent": USER_AGENT}
-        try:
-            response = await self.client.get(url, headers=headers, follow_redirects=True, timeout=120.0)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", 5))
-                logger.warning("Telegram rate limited for %s, retrying after %ds", cfg.channel, retry_after)
-                await asyncio.sleep(retry_after)
-                response = await self.client.get(url, headers=headers, follow_redirects=True, timeout=120.0)
-            response.raise_for_status()
-        except Exception as e:
-            logger.warning("Telegram request failed for %s: [%s] %r", cfg.channel, type(e).__name__, e)
-            return []
+        failures = []
 
-        return self._parse_channel_html(response.text, cfg, since)
+        for web_base in TELEGRAM_WEB_BASES:
+            url = f"{web_base}/{cfg.channel}"
+            try:
+                response = await self.client.get(url, headers=headers, follow_redirects=True, timeout=120.0)
+                if response.status_code == 429:
+                    try:
+                        retry_after = int(response.headers.get("Retry-After", 5))
+                    except ValueError:
+                        try:
+                            retry_at = parsedate_to_datetime(response.headers["Retry-After"])
+                            if retry_at.tzinfo is None:
+                                retry_at = retry_at.replace(tzinfo=timezone.utc)
+                            retry_after = math.ceil((retry_at - datetime.now(timezone.utc)).total_seconds())
+                        except (TypeError, ValueError, OverflowError):
+                            retry_after = 5
+                    retry_after = max(0, retry_after)
+                    logger.warning("Telegram rate limited for %s, retrying after %ds", cfg.channel, retry_after)
+                    await asyncio.sleep(retry_after)
+                    response = await self.client.get(url, headers=headers, follow_redirects=True, timeout=120.0)
+                response.raise_for_status()
+                return self._parse_channel_html(response.text, cfg, since)
+            except httpx.HTTPError as exc:
+                failures.append(exc)
+                logger.warning(
+                    "Telegram request failed for %s via %s: [%s] %r",
+                    cfg.channel,
+                    web_base,
+                    type(exc).__name__,
+                    exc,
+                )
+
+        last_failure = failures[-1]
+        raise RuntimeError(
+            f"All Telegram endpoints failed for {cfg.channel}: "
+            f"{type(last_failure).__name__}: {last_failure}"
+        ) from last_failure
 
     def _parse_channel_html(
         self, html: str, cfg: TelegramChannelConfig, since: datetime
@@ -116,11 +140,17 @@ class TelegramScraper(BaseScraper):
         title = self._make_title(text)
 
         # Find first external link as canonical URL; fallback to message URL
-        msg_url = f"https://t.me/{channel}/{msg_id}"
+        msg_url = f"{TELEGRAM_LINK_BASE}/{channel}/{msg_id}"
         canonical_url = msg_url
         for a in text_el.find_all("a", href=True):
             href = a["href"]
-            if href.startswith("http") and "t.me" not in href:
+            try:
+                parsed = urlsplit(href)
+            except ValueError:
+                continue
+            if parsed.scheme in {"http", "https"} and parsed.hostname not in {
+                "t.me", "telegram.me", "telegram.dog",
+            } and parsed.hostname:
                 canonical_url = href
                 break
 
@@ -132,11 +162,8 @@ class TelegramScraper(BaseScraper):
             content=text,
             author=channel,
             published_at=published_at,
-            metadata={
-                "msg_url": msg_url,
-                "channel": channel,
-                "category": cfg.category,
-            },
+            profile=cfg.profile,
+            metadata={"msg_url": msg_url, "channel": channel, "category": cfg.category},
         )
 
     @staticmethod

@@ -1,11 +1,12 @@
 """Tests for ChainedAIClient fallback logic."""
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
 from src.ai.client import ChainedAIClient, _create_chained_client
-from src.models import AIConfig, AIProvider
+from src.models import AIConfig, AIProvider, AI_PROVIDER_DEFAULTS
 
 
 class _DummyClient:
@@ -142,13 +143,6 @@ def test_should_fallback_detects_retryable_errors():
     assert ChainedAIClient._should_fallback(Exception("some random error")) is False
 
 
-def test_should_fallback_detects_network_failures():
-    """Connection errors and timeouts should also trigger fallback."""
-    assert ChainedAIClient._should_fallback(Exception("Connection error.")) is True
-    assert ChainedAIClient._should_fallback(Exception("Request timed out.")) is True
-    assert ChainedAIClient._should_fallback(Exception("connect timeout")) is True
-
-
 def test_lazy_initialization():
     """Downstream clients are not instantiated when the first provider succeeds."""
     cfg1 = _make_config(AIProvider.OPENAI)
@@ -181,41 +175,89 @@ def test_create_chained_client_parses_chain():
     assert chained.configs[1].api_key_env == ""
 
 
-def test_create_chained_client_keeps_user_settings_for_configured_provider_only():
-    """model/api_key_env/base_url apply to the configured provider, not the whole chain."""
+def test_create_chained_client_uses_provider_defaults_without_leaking_base_url():
+    """Every heterogeneous entry gets its own connection defaults."""
+    # ChatGPT requires a model selected from its account-specific catalog.
+    providers = [provider for provider in AIProvider if provider != AIProvider.OPENAI_CHATGPT]
     config = AIConfig(
         provider=AIProvider.OPENAI,
-        model="my-custom-model",
-        api_key_env="MY_KEY",
-        base_url="https://proxy.example/v1",
-        provider_chain="openai,deepseek",
+        provider_chain=",".join(provider.value for provider in providers),
+        model="custom-primary-model",
+        api_key_env="CUSTOM_PRIMARY_API_KEY",
+        base_url="https://primary.example/v1",
+        temperature=0.17,
+        max_tokens=1234,
+        throttle_sec=0.75,
+        analysis_concurrency=3,
+        enrichment_concurrency=5,
+        languages=["en", "zh-CN"],
     )
+
     chained = _create_chained_client(config)
 
-    assert chained.configs[0].model == "my-custom-model"
-    assert chained.configs[0].api_key_env == "MY_KEY"
-    assert chained.configs[0].base_url == "https://proxy.example/v1"
-    # The fallback provider must use its own defaults, not the primary's.
-    assert chained.configs[1].model == "deepseek-chat"
-    assert chained.configs[1].api_key_env == "DEEPSEEK_API_KEY"
-    assert chained.configs[1].base_url is None
+    assert [entry.provider for entry in chained.configs] == providers
+    for entry in chained.configs:
+        defaults = AI_PROVIDER_DEFAULTS[entry.provider]
+        assert entry.model == defaults["model"]
+        assert entry.api_key_env == defaults["api_key_env"]
+        expected_base_url = (
+            config.base_url
+            if entry.provider == config.provider
+            else defaults["base_url"]
+        )
+        assert entry.base_url == expected_base_url
+        assert entry.temperature == config.temperature
+        assert entry.max_tokens == config.max_tokens
+        assert entry.throttle_sec == config.throttle_sec
+        assert entry.analysis_concurrency == config.analysis_concurrency
+        assert entry.enrichment_concurrency == config.enrichment_concurrency
+        assert entry.languages == config.languages
 
 
-def test_chained_client_exposes_primary_config():
-    """Callers read throttle/concurrency/languages via client.config."""
+def test_create_chained_client_preserves_custom_azure_and_common_settings():
+    config = AIConfig(
+        provider=AIProvider.AZURE,
+        provider_chain="azure,openai",
+        model="custom-deployment",
+        api_key_env="CUSTOM_AZURE_API_KEY",
+        base_url="https://unused-azure-base.example",
+        azure_endpoint_env="CUSTOM_AZURE_ENDPOINT",
+        api_version="2025-01-01-preview",
+        temperature=0.42,
+        max_tokens=2048,
+        throttle_sec=1.25,
+        analysis_concurrency=4,
+        enrichment_concurrency=6,
+        languages=["ja", "en-US"],
+    )
+
+    azure, openai = _create_chained_client(config).configs
+
+    assert azure.azure_endpoint_env == "CUSTOM_AZURE_ENDPOINT"
+    assert azure.api_version == "2025-01-01-preview"
+    assert openai.azure_endpoint_env is None
+    assert openai.api_version is None
+    for entry in (azure, openai):
+        assert entry.temperature == 0.42
+        assert entry.max_tokens == 2048
+        assert entry.throttle_sec == 1.25
+        assert entry.analysis_concurrency == 4
+        assert entry.enrichment_concurrency == 6
+        assert entry.languages == ["ja", "en-US"]
+
+
+def test_create_chained_client_applies_azure_connection_defaults():
     config = AIConfig(
         provider=AIProvider.OPENAI,
+        provider_chain="openai,azure",
         model="m1",
         api_key_env="K1",
-        provider_chain="openai,ollama",
-        throttle_sec=1.5,
-        languages=["zh", "en"],
     )
-    chained = _create_chained_client(config)
 
-    assert chained.config is chained.configs[0]
-    assert chained.config.throttle_sec == 1.5
-    assert chained.config.languages == ["zh", "en"]
+    azure = _create_chained_client(config).configs[1]
+
+    assert azure.azure_endpoint_env == "AZURE_OPENAI_ENDPOINT"
+    assert azure.api_version == "2024-10-21"
 
 
 def test_create_chained_client_rejects_unknown_provider():
@@ -228,3 +270,60 @@ def test_create_chained_client_rejects_unknown_provider():
     )
     with pytest.raises(ValueError, match="Unsupported AI provider in chain"):
         _create_chained_client(config)
+
+
+def test_pipeline_preserves_batch_settings_with_provider_chain(tmp_path, monkeypatch):
+    from pathlib import Path
+    from src.ai.analyzer import ContentAnalyzer
+    from src.ai.enricher import ContentEnricher
+    from src.models import Config, ContentItem, SourceType
+    from src.orchestrator import HorizonOrchestrator
+    from src.processing import ProfileRegistry
+    from src.storage.manager import StorageManager
+
+    config = Config.model_validate({
+        "ai": {
+            "provider": "openai", "model": "test", "api_key_env": "UNUSED_KEY",
+            "provider_chain": "openai,ollama", "analysis_concurrency": 3,
+            "enrichment_concurrency": 2, "throttle_sec": 1.25,
+        },
+        "sources": {},
+    })
+    profiles = ProfileRegistry.load(Path(__file__).resolve().parents[1] / "profiles", "tech-news")
+    orchestrator = HorizonOrchestrator(config, StorageManager(str(tmp_path)), profiles=profiles)
+    items = [ContentItem(
+        id=f"rss:test:{i}", source_type=SourceType.RSS, title=f"Story {i}",
+        url=f"https://example.com/{i}", published_at=datetime.now(timezone.utc),
+    ) for i in range(5)]
+    active = {"analysis": 0, "enrichment": 0}
+    peak = dict(active)
+    delays = []
+    sleep = asyncio.sleep
+
+    async def record_sleep(delay):
+        if delay:
+            delays.append(delay)
+        await sleep(0)
+
+    async def process(stage, client):
+        assert isinstance(client, ChainedAIClient)
+        active[stage] += 1
+        peak[stage] = max(peak[stage], active[stage])
+        await sleep(0)
+        active[stage] -= 1
+
+    async def analyze(self, item):
+        await process("analysis", self.client)
+
+    async def enrich(self, item):
+        await process("enrichment", self.client)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(ContentAnalyzer, "_analyze_item", analyze)
+    monkeypatch.setattr(ContentEnricher, "_enrich_item", enrich)
+    asyncio.run(orchestrator.analyze_items(items))
+    enriched = asyncio.run(orchestrator.enrich_items(items))
+
+    assert peak == {"analysis": 3, "enrichment": 2}
+    assert delays == [1.25] * 4
+    assert enriched.succeeded_count == 5

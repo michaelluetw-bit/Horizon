@@ -1,10 +1,9 @@
 {
-  "version": "1.0",
   "ai": {
-    "provider": "deepseek",
-    "model": "deepseek-v4-flash",
-    "base_url": "https://api.deepseek.com",
-    "api_key_env": "DEEPSEEK_API_KEY",
+    "provider": "openai",
+    "model": "gpt-6.1-terra",
+    "base_url": null,
+    "api_key_env": "OPENAI_API_KEY",
     "temperature": 0.3,
     "max_tokens": 8192,
     "throttle_sec": 1,
@@ -15,55 +14,73 @@
     "analysis_concurrency": 5,
     "enrichment_concurrency": 5
   },
+  "processing": {
+    "profiles_dir": "profiles",
+    "default_profile": "tech-news",
+    "profile_settings": {
+      "tech-news": {
+        "threshold": 8.0,
+        "topic_dedup": true
+      }
+    }
+  },
   "sources": {
     "github": [
       {
         "type": "user_events",
         "username": "karpathy",
-        "enabled": true
+        "enabled": true,
+        "profile": "tech-news"
       },
       {
         "type": "repo_releases",
         "owner": "vllm-project",
         "repo": "vllm",
-        "enabled": true
+        "enabled": true,
+        "profile": "tech-news"
       },
       {
         "type": "repo_releases",
         "owner": "sgl-project",
         "repo": "sglang",
-        "enabled": true
+        "enabled": true,
+        "profile": "tech-news"
       },
       {
         "type": "repo_releases",
         "owner": "triton-lang",
         "repo": "triton",
-        "enabled": true
+        "enabled": true,
+        "profile": "tech-news"
       }
     ],
     "hackernews": {
       "enabled": true,
       "fetch_top_stories": 30,
-      "min_score": 150
+      "min_score": 150,
+      "profile": "tech-news"
     },
     "rss": [
       {
         "name": "Simon Willison",
         "url": "https://simonwillison.net/atom/everything/",
         "enabled": true,
-        "category": "ai-tools"
+        "category": "ai-tools",
+        "profile": "tech-news"
       },
       {
         "name": "GitHub Trending - Daily",
         "url": "https://mshibanami.github.io/GitHubTrendingRSS/daily/all.xml",
         "enabled": true,
-        "category": "github-trending"
+        "category": "github-trending",
+        "profile": "tech-news"
       },
       {
         "name": "LWN.net",
         "url": "https://lwn.net/headlines/full_text?key=${LWN_KEY}",
         "enabled": true,
-        "category": "linux-kernel"
+        "category": "linux-kernel",
+        "profile": "tech-news"
       }
     ],
     "reddit": {
@@ -75,7 +92,8 @@
           "sort": "hot",
           "time_filter": "day",
           "fetch_limit": 10,
-          "min_score": 60
+          "min_score": 60,
+          "profile": "tech-news"
         },
         {
           "subreddit": "LocalLLaMA",
@@ -83,7 +101,8 @@
           "sort": "hot",
           "time_filter": "day",
           "fetch_limit": 10,
-          "min_score": 60
+          "min_score": 60,
+          "profile": "tech-news"
         }
       ],
       "users": [],
@@ -95,14 +114,19 @@
         {
           "channel": "zaihuapd",
           "enabled": true,
-          "fetch_limit": 20
+          "fetch_limit": 20,
+          "profile": "tech-news"
         }
       ]
     }
   },
-  "filtering": {
-    "ai_score_threshold": 8.0,
+  "collection": {
     "time_window_hours": 24
+  },
+  "digest": {
+    "profile_order": [
+      "tech-news"
+    ]
   },
   "webhook": {
     "enabled": true,

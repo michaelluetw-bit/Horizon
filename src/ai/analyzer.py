@@ -1,23 +1,43 @@
 """Content analysis using AI."""
 
 import asyncio
+import logging
 from typing import List, Optional
-from tenacity import retry, stop_after_attempt, wait_exponential
+from pydantic import ValidationError
+from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn
+from tenacity import retry, retry_if_exception_type, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 from .client import AIClient
-from .prompts import CONTENT_ANALYSIS_SYSTEM, CONTENT_ANALYSIS_USER
-from .utils import parse_json_response
-from ..models import ContentItem
+from .classifier import ContentClassifier
+from .prompting.analysis import analysis_system_prompt, analysis_user_prompt
+from .utils import gather_ai_tasks, parse_json_response
+from .errors import AIProviderUnavailableError
+from ..models import ContentAnalysis, ContentItem
+from ..processing.content import select_content, split_content
+from ..processing.profiles import ProfileRegistry
 
-DEFAULT_THROTTLE_SEC = 0.0
+logger = logging.getLogger(__name__)
 
 
 class ContentAnalyzer:
     """Analyzes content items using AI to determine importance."""
 
-    def __init__(self, ai_client: AIClient):
+    def __init__(
+        self,
+        ai_client: AIClient,
+        profiles: ProfileRegistry,
+        console: Optional[Console] = None,
+        *,
+        concurrency: int = 1,
+        throttle_sec: float = 0.0,
+    ):
         self.client = ai_client
+        self.profiles = profiles
+        self.classifier = ContentClassifier(ai_client, profiles)
+        self.console = console or Console(stderr=True)
+        self.concurrency = max(concurrency, 1)
+        self.throttle_sec = max(throttle_sec, 0.0)
 
     @staticmethod
     def _parse_json_response(response: str) -> Optional[dict]:
@@ -27,36 +47,25 @@ class ContentAnalyzer:
         """
         return parse_json_response(response)
 
-    def _get_throttle_sec(self) -> float:
-        """Return the configured inter-item throttle, clamped to zero or above."""
-        config = getattr(self.client, "config", None)
-        throttle_sec = getattr(config, "throttle_sec", DEFAULT_THROTTLE_SEC)
-        return max(throttle_sec, 0.0)
-
-    def _get_concurrency(self) -> int:
-        """Return the configured analysis concurrency, clamped to 1 or above."""
-        config = getattr(self.client, "config", None)
-        concurrency = getattr(config, "analysis_concurrency", 1)
-        return max(concurrency, 1)
-
     async def analyze_batch(self, items: List[ContentItem]) -> List[ContentItem]:
-        throttle_sec = self._get_throttle_sec()
-        concurrency = self._get_concurrency()
-        semaphore = asyncio.Semaphore(concurrency)
-        throttle_lock = asyncio.Lock()
+        semaphore = asyncio.Semaphore(self.concurrency)
 
-        async def _process(item: ContentItem, progress_task) -> ContentItem:
+        async def _process(item: ContentItem, index: int, progress_task) -> ContentItem:
             async with semaphore:
                 try:
                     await self._analyze_item(item)
+                except AIProviderUnavailableError:
+                    raise
                 except Exception as e:
-                    print(f"Error analyzing item {item.id}: {e}")
-                    item.ai_score = 0.0
-                    item.ai_reason = "Analysis failed"
-                    item.ai_summary = item.title
-            if throttle_sec > 0:
-                async with throttle_lock:
-                    await asyncio.sleep(throttle_sec)
+                    logger.error("Error analyzing item %s: %s", item.id, e)
+                    if item.processing:
+                        item.processing.analysis = ContentAnalysis(
+                            score=None,
+                            reason="Analysis failed",
+                            summary=item.title,
+                        )
+                if self.throttle_sec > 0 and index < len(items) - 1:
+                    await asyncio.sleep(self.throttle_sec)
             progress.advance(progress_task)
             return item
 
@@ -66,16 +75,18 @@ class ContentAnalyzer:
             BarColumn(),
             MofNCompleteColumn(),
             transient=True,
+            console=self.console,
         ) as progress:
             task = progress.add_task("Analyzing", total=len(items))
             coros = [
-                _process(item, task) for item in items
+                _process(item, i, task) for i, item in enumerate(items)
             ]
-            analyzed_items = await asyncio.gather(*coros)
+            analyzed_items = await gather_ai_tasks(coros)
 
         return analyzed_items
 
     @retry(
+        retry=retry_if_exception_type(Exception) & retry_if_not_exception_type(AIProviderUnavailableError),
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=2, max=10)
     )
@@ -85,22 +96,24 @@ class ContentAnalyzer:
         Args:
             item: Content item to analyze (modified in-place)
         """
-        # Prepare content section
-        content_section = ""
-        if item.content:
-            # Split off comments if present
-            content_text = item.content
-            if "--- Top Comments ---" in content_text:
-                main, comments_part = content_text.split("--- Top Comments ---", 1)
-                content_section = f"Content: {main.strip()[:800]}"
-            else:
-                content_section = f"Content: {content_text[:1000]}"
+        profile = await self.classifier.resolve(item)
+        if item.processing:
+            item.processing.artifacts.clear()
+
+        content_parts = split_content(item.content)
+        selected_content = select_content(
+            content_parts.main,
+            profile.definition.content.analysis_max_chars,
+            profile.definition.content.sampling,
+        )
+        content_section = f"Content: {selected_content}" if selected_content else ""
 
         # Prepare discussion section (comments, engagement)
         discussion_parts = []
-        if item.content and "--- Top Comments ---" in item.content:
-            comments_part = item.content.split("--- Top Comments ---", 1)[1]
-            discussion_parts.append(f"Community Comments:\n{comments_part[:1500]}")
+        if content_parts.comments:
+            discussion_parts.append(
+                f"Community Comments:\n{content_parts.comments[:1500]}"
+            )
 
         meta = item.metadata
         engagement_items = []
@@ -129,53 +142,59 @@ class ContentAnalyzer:
 
         discussion_section = "\n".join(discussion_parts) if discussion_parts else ""
 
-        # Check if config.languages contains "zh"
-        config = getattr(self.client, "config", None)
-        languages = getattr(config, "languages", ["en"])
-        need_zh = "zh" in languages
-
         # Generate user prompt
-        user_prompt = CONTENT_ANALYSIS_USER.format(
-            title=item.title,
-            source=f"{item.source_type.value}",
-            author=item.author or "Unknown",
-            url=str(item.url),
-            content_section=content_section,
-            discussion_section=discussion_section
-        )
-
-        if need_zh:
-            user_prompt += (
-                "\n\n**CRITICAL REQUIREMENT:**\n"
-                "Because the target language is Traditional Chinese, you MUST also add two fields to the JSON response:\n"
-                "- \"title_zh\": A Traditional Chinese (繁體中文) translation of the title.\n"
-                "- \"summary_zh\": A detailed summary in Traditional Chinese (繁體中文) (3-4 sentences, about 150-200 Chinese characters in total) explaining: "
-                "1) What exactly is new or changed, 2) Why it matters or its potential impact, and 3) Any key technical details.\n"
-                "Ensure that these two extra keys are included in the JSON object."
-            )
+        user_prompt = analysis_user_prompt(item, content_section, discussion_section)
 
         # Get AI completion
         response = await self.client.complete(
-            system=CONTENT_ANALYSIS_SYSTEM,
+            system=analysis_system_prompt(profile),
             user=user_prompt,
         )
 
-        # Parse JSON response with robust fallback
-        result = self._parse_json_response(response)
+        result, failure = self._validate_analysis_response(response)
         if result is None:
-            print(f"Warning: could not parse analysis response for {item.id}, using defaults")
-            item.ai_score = 0.0
-            item.ai_reason = "Analysis response parse failed"
-            item.ai_summary = item.title
-            item.ai_tags = []
+            repair_response = await self.client.complete(
+                system=analysis_system_prompt(profile),
+                user=(
+                    user_prompt
+                    + "\n\nYour previous response did not satisfy the output contract "
+                    f"({failure}). Analyze the item again and return only the required JSON object."
+                ),
+                temperature=0,
+            )
+            result, failure = self._validate_analysis_response(repair_response)
+
+        if result is None:
+            logger.warning(
+                "Could not parse analysis response for %s after one repair attempt (%s), using defaults",
+                item.id,
+                failure,
+            )
+            if item.processing:
+                item.processing.analysis = ContentAnalysis(
+                    score=None,
+                    reason="Analysis response parse failed",
+                    summary=item.title,
+                )
             return
 
-        # Update item with analysis results
-        item.ai_score = float(result.get("score", 0))
-        item.ai_reason = result.get("reason", "")
-        item.ai_summary = result.get("summary", item.title)
-        item.ai_tags = result.get("tags", [])
+        if item.processing:
+            item.processing.analysis = result
 
-        if need_zh:
-            item.metadata["title_zh"] = result.get("title_zh") or item.title
-            item.metadata["detailed_summary_zh"] = result.get("summary_zh") or item.ai_summary
+    @classmethod
+    def _validate_analysis_response(
+        cls,
+        response: str,
+    ) -> tuple[Optional[ContentAnalysis], str]:
+        parsed = cls._parse_json_response(response)
+        if not isinstance(parsed, dict):
+            return None, "response was not a JSON object"
+        try:
+            result = ContentAnalysis.model_validate(parsed)
+        except ValidationError as exc:
+            first_error = exc.errors(include_url=False)[0]
+            location = ".".join(str(part) for part in first_error["loc"])
+            return None, f"invalid field {location or '<root>'}: {first_error['type']}"
+        if result.score is None:
+            return None, "score is required by the analysis contract"
+        return result, ""

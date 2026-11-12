@@ -5,7 +5,21 @@ title: Source Scrapers
 
 # Source Scrapers
 
-Horizon fetches content from multiple source types. All scrapers inherit from `BaseScraper`, share an async HTTP client, and implement a `fetch(since)` method that returns a list of `ContentItem` objects. Sources are fetched concurrently via `asyncio.gather`.
+Horizon fetches content from multiple source types. Scrapers inherit from `BaseScraper` and implement `fetch(since) -> FetchResult`. HTTP scrapers share an async client; sources are fetched concurrently via `asyncio.gather`.
+
+`FetchResult` contains `items`, named `failures`, and a `successful` request count.
+Its status distinguishes `success`, `empty`, `partial_failure`, and `failure`.
+A successful request with no new items still counts as successful. Missing
+credentials/dependencies and exhausted request failures must be reported rather
+than returned as an empty success. The orchestrator aggregates these results for
+both CLI and MCP, retaining items from healthy sources.
+
+For independent feeds, users, or queries, use
+`await result.collect(label, fetch_items())`; the inner coroutine returns a list
+of `ContentItem` objects and raises on failure. Keep retries and alternate
+endpoints inside that coroutine, so a recovered request counts as successful.
+Consumers that previously used the scraper's return value as a list should now
+read `result.items` and inspect `result.status` / `result.failures`.
 
 ## Hacker News
 
@@ -80,6 +94,14 @@ Two source types are supported:
 
 Fetches any Atom/RSS feed using the `feedparser` library. Tries multiple date fields (`published`, `updated`, `created`) with fallback parsing.
 
+Up to three feeds are processed concurrently. Feeds with the same configured hostname are processed serially, including rate-limit waits, so queued feeds from one host do not occupy the other concurrency slots. A feed waiting to retry keeps its slot while other active feeds continue; if all three are waiting, queued feeds wait too. Results retain configuration order, and a failed feed does not discard successful feeds.
+
+Feed requests identify Horizon through a `User-Agent` header because some publishers
+reject the HTTP client default. This header is scoped to feed requests and does
+not change the shared client or full-article extractor requests. HTTP errors such
+as 403 and 410 remain source failures; retired feed URLs must be updated in the
+source configuration.
+
 **Config** (`sources.rss`, list of entries):
 
 ```json
@@ -87,13 +109,15 @@ Fetches any Atom/RSS feed using the `feedparser` library. Tries multiple date fi
   "name": "Simon Willison",
   "url": "https://simonwillison.net/atom/everything/",
   "enabled": true,
-  "category": "ai-tools"
+  "category": "ai-tools",
+  "content_extractor": "trafilatura"
 }
 ```
 
 - `category` — optional tag for grouping (e.g., `"programming"`, `"microblog"`)
+- `content_extractor` — optional name of an extractor defined in `extractors` config; when set, the full article text replaces the feed-provided excerpt (see [Extractors](extractors.md))
 
-**Extracted data**: title, URL, author, content (from `summary`/`description`/`content` fields), feed name, category, and entry tags.
+**Extracted data**: title, URL, author, content (from `summary`/`description`/`content` fields, or full article text if an extractor is configured), feed name, category, and entry tags.
 
 ## Reddit
 
@@ -136,8 +160,8 @@ Subreddits and users are fetched concurrently. Comments are sorted by score, lim
 }
 ```
 
-- `sort` — `hot`, `new`, `top`, or `rising` (subreddits); `hot` or `new` (users)
-- `time_filter` — for `top`/`rising` sorts: `hour`, `day`, `week`, `month`, `year`, `all`
+- `sort` — `hot`, `new`, `top`, `rising`, or `controversial` (subreddits); `hot` or `new` (users)
+- `time_filter` — for `top` and `controversial` sorts: `hour`, `day`, `week`, `month`, `year`, `all`
 - `min_score` — minimum post score (subreddits only)
 - `category` — optional tag for balanced digest grouping; set per subreddit or per user entry
 
@@ -151,7 +175,7 @@ Subreddits and users are fetched concurrently. Comments are sorted by score, lim
 
 Uses the [OpenBB Platform](https://www.openbb.co/platform) Python SDK via `obb.news.company()` to fetch company news for one or more ticker watchlists.
 
-The scraper imports `openbb` lazily. If the optional dependency is not installed, Horizon logs a warning and skips the source instead of failing the whole run.
+The scraper imports `openbb` lazily. If the optional dependency is not installed, it reports a source failure. Other healthy sources can still produce a digest; the CLI fails when every attempted source fails.
 
 **Config** (`sources.openbb`):
 
@@ -199,12 +223,17 @@ Flow:
 2. Poll `/v2/actor-runs/{run_id}` until status is `SUCCEEDED` or a terminal failure
 3. GET `/v2/datasets/{dataset_id}/items` to retrieve results
 
+Profile timelines use `source_mode: "profiles"`. Keyword discovery and reply expansion reuse `source_mode: "search"` with `search_query`.
+
+When users are configured, a single profile run fetches their timelines together. Each non-empty keyword query starts a separate search run, independently of the configured users. Either path can be used on its own. Results are filtered to the current time window and merged with deduplication by tweet ID across all runs.
+
 **Config** (`sources.twitter`):
 
 ```json
 {
   "enabled": true,
   "users": ["karpathy", "ylecun"],
+  "keywords": ["LLM", "open source"],
   "fetch_limit": 10,
   "fetch_reply_text": false,
   "max_replies_per_tweet": 3,
@@ -216,7 +245,9 @@ Flow:
 ```
 
 - `users` — Twitter screen names to monitor, without the `@` prefix
-- `fetch_limit` — maximum tweets to fetch per run
+- `keywords` — independent Apify search queries (`source_mode: "search"`), not filters on the configured users' timelines. Not supported in Playwright mode.
+- `fetch_limit` — in Apify mode, each profile or keyword-search actor run requests up to `max(100, fetch_limit)` tweets. This is not a combined limit: the example above starts three discovery runs with a limit of 100 tweets each, before time filtering and deduplication. Each keyword adds an actor run and associated Apify usage.
+- `category` — optional tag for balanced digest grouping (applies to all tweets from this source)
 - `fetch_reply_text` — when `true`, a second Apify run fetches reply bodies for each important tweet and appends them under `--- Top Comments ---` for AI analysis
 - `max_replies_per_tweet` — maximum reply lines per tweet (sorted by engagement score)
 - `max_tweets_to_expand` — cap on reply expansion runs per pipeline cycle, to control Apify credit usage
@@ -226,4 +257,4 @@ Flow:
 
 **Authentication**: Set `APIFY_TOKEN` in your `.env`. Get a token at [console.apify.com](https://console.apify.com/account/integrations).
 
-**Extracted data**: tweet text, URL, author, publish time, likes, retweets, replies, views, and (optionally) reply-thread text appended under `--- Top Comments ---`.
+**Extracted data**: tweet text, URL, author, publish time, likes, retweets, replies, views, category, and (optionally) reply-thread text appended under `--- Top Comments ---`.

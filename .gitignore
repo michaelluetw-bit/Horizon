@@ -46,6 +46,7 @@ data/mcp.secrets.json
 data/mcp-secrets.json
 data/mcp-runs/
 data/x_cookies_*.json
+data/wechat_session.json
 
 docs/_posts/*.md
 
@@ -63,7 +64,3 @@ logs/*.log
 todo.txt
 .ruff_cache
 .pytest_cache
-
-# Cloudflare Watchdog local dependencies
-workers/horizon-watchdog/node_modules/
-workers/horizon-watchdog/.wrangler/

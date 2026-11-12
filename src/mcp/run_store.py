@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -10,12 +11,24 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .._file_utils import _atomic_write_text
+
+
+logger = logging.getLogger(__name__)
+
 
 STAGES = {
     "raw": "raw_items.json",
     "scored": "scored_items.json",
     "filtered": "filtered_items.json",
     "enriched": "enriched_items.json",
+}
+STAGE_ORDER = tuple(STAGES)
+_META_PREFIXES = {
+    "scored": ("scored_", "selected_count"),
+    "filtered": ("filtered_", "filter_", "topic_", "balanced_"),
+    "enriched": ("enrichment_", "enriched_", "citation_count"),
+    "summary": ("summary_",),
 }
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 LANGUAGE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -51,7 +64,50 @@ class RunStore:
         return (self.run_dir(run_id) / self._stage_file(stage)).exists()
 
     def save_items(self, run_id: str, stage: str, items: list[dict[str, Any]]) -> Path:
-        return self.write_json(run_id, self._stage_file(stage), items)
+        path = self.write_json(run_id, self._stage_file(stage), items)
+        self.invalidate_after(run_id, stage)
+        return path
+
+    def invalidate_after(self, run_id: str, stage: str) -> None:
+        """Remove artifacts derived from the newly saved stage."""
+        try:
+            stage_index = STAGE_ORDER.index(stage)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported stage: {stage}") from exc
+        run_dir = self.run_dir(run_id)
+        for downstream in STAGE_ORDER[stage_index + 1 :]:
+            (run_dir / STAGES[downstream]).unlink(missing_ok=True)
+        for summary_path in run_dir.glob("summary-*.md"):
+            summary_path.unlink()
+        self._invalidate_meta(run_id, (*STAGE_ORDER[stage_index + 1 :], "summary"))
+
+    def invalidate_from(self, run_id: str, stage: str) -> None:
+        """Remove a stage and every artifact derived from it."""
+        try:
+            stage_index = STAGE_ORDER.index(stage)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported stage: {stage}") from exc
+        run_dir = self.run_dir(run_id)
+        for invalidated in STAGE_ORDER[stage_index:]:
+            (run_dir / STAGES[invalidated]).unlink(missing_ok=True)
+        for summary_path in run_dir.glob("summary-*.md"):
+            summary_path.unlink()
+        self._invalidate_meta(run_id, (*STAGE_ORDER[stage_index:], "summary"))
+
+    def _invalidate_meta(self, run_id: str, stages: tuple[str, ...]) -> None:
+        prefixes = tuple(
+            prefix
+            for stage in stages
+            for prefix in _META_PREFIXES.get(stage, ())
+        )
+        meta = self.load_meta(run_id)
+        cleaned = {
+            key: value
+            for key, value in meta.items()
+            if not key.startswith(prefixes)
+        }
+        if cleaned != meta:
+            self.write_json(run_id, "meta.json", cleaned)
 
     def load_items(self, run_id: str, stage: str) -> list[dict[str, Any]]:
         return self.read_json(run_id, self._stage_file(stage))
@@ -59,7 +115,7 @@ class RunStore:
     def save_summary(self, run_id: str, language: str, markdown: str) -> Path:
         filename = self._summary_file(language)
         path = self.run_dir(run_id) / filename
-        path.write_text(markdown, encoding="utf-8")
+        _atomic_write_text(path, markdown)
         return path
 
     def load_summary(self, run_id: str, language: str) -> str:
@@ -90,7 +146,14 @@ class RunStore:
                 continue
             try:
                 meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                logger.warning("Could not read run metadata %s: %s", run_dir.name, exc)
+                continue
+            if not isinstance(meta, dict) or any(
+                key in meta and not isinstance(meta[key], str)
+                for key in ("created_at", "updated_at")
+            ):
+                logger.warning("Skipping invalid run metadata: %s", run_dir.name)
                 continue
 
             created = meta.get("created_at") or ""
@@ -109,10 +172,7 @@ class RunStore:
 
     def write_json(self, run_id: str, filename: str, payload: Any) -> Path:
         path = self.run_dir(run_id) / filename
-        path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        _atomic_write_text(path, json.dumps(payload, ensure_ascii=False, indent=2))
         return path
 
     def read_json(self, run_id: str, filename: str) -> Any:
