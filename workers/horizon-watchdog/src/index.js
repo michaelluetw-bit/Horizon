@@ -353,6 +353,7 @@ export async function evaluateScheduledInvocation({
   try {
     primaryRuns = await listWorkflowRuns({
       fetchImpl,
+      token: env.HORIZON_GITHUB_TOKEN,
       event: "schedule",
       targetDate: timing.targetDate,
     });
@@ -403,6 +404,7 @@ export async function evaluateScheduledInvocation({
   try {
     fallbackRuns = await listWorkflowRuns({
       fetchImpl,
+      token: env.HORIZON_GITHUB_TOKEN,
       event: "workflow_dispatch",
       targetDate: timing.targetDate,
     });

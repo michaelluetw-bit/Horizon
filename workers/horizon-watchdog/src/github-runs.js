@@ -35,17 +35,19 @@ export function workflowRunsUrl({ event, targetDate, page = 1 }) {
   return url.toString();
 }
 
-export async function listWorkflowRuns({ fetchImpl, event, targetDate }) {
+export async function listWorkflowRuns({ fetchImpl, token, event, targetDate }) {
   const runs = [];
   let page = 1;
   let totalCount;
 
   while (totalCount === undefined || runs.length < totalCount) {
     const response = await fetchImpl(workflowRunsUrl({ event, targetDate, page }), {
-      headers: GITHUB_API_HEADERS,
+      headers: token
+        ? { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` }
+        : GITHUB_API_HEADERS,
     });
     if (!response.ok) {
-      throw new Error("WORKFLOW_RUNS_QUERY_FAILED");
+      throw new Error(`WORKFLOW_RUNS_QUERY_FAILED_HTTP_${response.status}`);
     }
 
     let payload;

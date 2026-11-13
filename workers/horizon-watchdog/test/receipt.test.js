@@ -88,3 +88,24 @@ describe("Cloudflare redemption receipt", () => {
     ).resolves.toEqual({ accepted: false, reason: "RECEIPT_CONTEXT_MISMATCH" });
   });
 });
+
+it("creates and verifies receipts with the Node-exported Ed25519 JWK label", async () => {
+  const { privateKeyJwk, publicKeyJwk } = await signingKeys();
+  const assertion = await createAssertion({
+    privateKeyJwk,
+    controllerCron: "0 23 * * *",
+    scheduledTime: SCHEDULED_TIME,
+    issuedAtMs: REDEEMED_AT,
+    jti: "F".repeat(43),
+  });
+  privateKeyJwk.alg = "Ed25519";
+  publicKeyJwk.alg = "Ed25519";
+  const receipt = await createReceipt({
+    privateKeyJwk, assertionPayload: assertion.payload,
+    githubContext: GITHUB_CONTEXT, redeemedAtMs: REDEEMED_AT, receiptId: "receipt-3",
+  });
+  await expect(verifyReceipt({
+    receiptSignature: receipt.receipt_signature, publicKeyJwk,
+    assertionPayload: assertion.payload, githubContext: GITHUB_CONTEXT,
+  })).resolves.toMatchObject({ accepted: true });
+});
