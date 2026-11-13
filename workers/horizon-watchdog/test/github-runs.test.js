@@ -205,3 +205,19 @@ describe("decidePrimaryRuns", () => {
     });
   });
 });
+
+it("authenticates workflow searches with the configured token", async () => {
+  const fetchImpl = async (_url, { headers }) => headers.Authorization === "Bearer test-token"
+    ? new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), { status: 200 })
+    : new Response("rate limited", { status: 403 });
+  await expect(listWorkflowRuns({
+    fetchImpl, token: "test-token", event: "schedule", targetDate: "2026-07-14",
+  })).resolves.toEqual([]);
+});
+
+it("reports the HTTP status without including the response body", async () => {
+  const fetchImpl = async () => new Response("sensitive response", { status: 403 });
+  await expect(listWorkflowRuns({
+    fetchImpl, token: "test-token", event: "schedule", targetDate: "2026-07-14",
+  })).rejects.toMatchObject({ message: "WORKFLOW_RUNS_QUERY_FAILED_HTTP_403" });
+});

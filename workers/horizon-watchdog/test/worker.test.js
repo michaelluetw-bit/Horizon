@@ -395,3 +395,18 @@ describe("handleHandoffRequest", () => {
     expect(new URL(registryFetch.mock.calls[1][0].url).pathname).toBe("/redeem");
   });
 });
+
+it("authenticates both schedule and fallback searches using the configured token", async () => {
+  const fetchImpl = async (url, { headers }) => {
+    if (headers.Authorization !== "Bearer test-token") return new Response("", { status: 403 });
+    const fallback = new URL(url).searchParams.get("event") === "workflow_dispatch";
+    const runs = fallback ? [{ ...scheduleRun({ id: 54 }), event: "workflow_dispatch", name: "fallback-watchdog" }] : [];
+    return new Response(JSON.stringify({ total_count: runs.length, workflow_runs: runs }), { status: 200 });
+  };
+  await expect(evaluateScheduledInvocation({
+    controller: { cron: "0 23 * * *", scheduledTime: SCHEDULED_TIME },
+    env: { HORIZON_GITHUB_TOKEN: "test-token" },
+    invocationStartedAt: SCHEDULED_TIME,
+    fetchImpl,
+  })).resolves.toMatchObject({ decision: "FALLBACK_ALREADY_REQUESTED", workflowRunId: 54 });
+});

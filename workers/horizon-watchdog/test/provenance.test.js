@@ -157,3 +157,27 @@ describe("Cloudflare provenance assertion", () => {
     ).resolves.toEqual({ accepted: false, reason: "ASSERTION_SCHEDULE_TIME_INVALID" });
   });
 });
+
+it("signs and verifies with the Node-exported Ed25519 JWK label", async () => {
+  const { privateKeyJwk, publicKeyJwk } = await signingKeys();
+  privateKeyJwk.alg = "Ed25519";
+  publicKeyJwk.alg = "Ed25519";
+  const assertion = await createAssertion({
+    privateKeyJwk,
+    controllerCron: "0 23 * * *",
+    scheduledTime: SCHEDULED_TIME,
+    issuedAtMs: ISSUED_AT,
+    jti: "F".repeat(43),
+  });
+  await expect(verifyAssertion({ jws: assertion.jws, publicKeyJwk, nowMs: ISSUED_AT + 1 }))
+    .resolves.toMatchObject({ accepted: true });
+});
+
+it("still rejects unrelated JWK algorithm labels", async () => {
+  const { privateKeyJwk } = await signingKeys();
+  privateKeyJwk.alg = "HS256";
+  await expect(createAssertion({
+    privateKeyJwk, controllerCron: "0 23 * * *",
+    scheduledTime: SCHEDULED_TIME, issuedAtMs: ISSUED_AT, jti: "G".repeat(43),
+  })).rejects.toThrow();
+});

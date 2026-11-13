@@ -1,3 +1,5 @@
+import { compatibleEd25519Jwk } from "./ed25519-jwk.js";
+
 const KEY_ID = "horizon-watchdog-ed25519-v1";
 const RECEIPT_HEADER = {
   alg: "EdDSA",
@@ -49,7 +51,7 @@ async function signReceipt(payload, privateKeyJwk) {
   const encodedHeader = base64urlEncode(encoder.encode(canonicalJson(RECEIPT_HEADER)));
   const encodedPayload = base64urlEncode(encoder.encode(canonicalJson(payload)));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
-  const privateKey = await crypto.subtle.importKey("jwk", privateKeyJwk, { name: "Ed25519" }, false, ["sign"]);
+  const privateKey = await crypto.subtle.importKey("jwk", compatibleEd25519Jwk(privateKeyJwk), { name: "Ed25519" }, false, ["sign"]);
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, privateKey, encoder.encode(signingInput));
   return `${signingInput}.${base64urlEncode(new Uint8Array(signature))}`;
 }
@@ -116,7 +118,7 @@ export async function verifyReceipt({ receiptSignature, publicKeyJwk, assertionP
 
   let signatureValid;
   try {
-    const publicKey = await crypto.subtle.importKey("jwk", publicKeyJwk, { name: "Ed25519" }, false, ["verify"]);
+    const publicKey = await crypto.subtle.importKey("jwk", compatibleEd25519Jwk(publicKeyJwk), { name: "Ed25519" }, false, ["verify"]);
     signatureValid = await crypto.subtle.verify(
       { name: "Ed25519" },
       publicKey,
