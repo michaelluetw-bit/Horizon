@@ -19,7 +19,7 @@ HORIZON_WORKFLOW_REF = (
     "michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main"
 )
 PRIMARY_CRON = "17 20 * * *"
-WATCHDOG_CRON = "0 23 * * *"
+WATCHDOG_CRON = "30 0 * * *"
 PROVENANCE_MARKER = "horizon-provenance-v1"
 _MARKER_PATTERN = re.compile(r"<!-- horizon-provenance-v1:([A-Za-z0-9_-]+) -->")
 _JTI_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")

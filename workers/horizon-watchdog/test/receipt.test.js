@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { createAssertion } from "../src/provenance.js";
 import { createReceipt, verifyReceipt } from "../src/receipt.js";
 
-const SCHEDULED_TIME = Date.parse("2026-07-13T23:00:00.000Z");
-const REDEEMED_AT = Date.parse("2026-07-13T23:02:00.000Z");
+const SCHEDULED_TIME = Date.parse("2026-07-14T00:30:00.000Z");
+const REDEEMED_AT = Date.parse("2026-07-14T00:32:00.000Z");
 const GITHUB_CONTEXT = {
   github_run_id: 12345,
   github_run_attempt: 1,
@@ -26,7 +26,7 @@ describe("Cloudflare redemption receipt", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 23 * * *",
+      controllerCron: "30 0 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: REDEEMED_AT,
       jti: "D".repeat(43),
@@ -42,7 +42,7 @@ describe("Cloudflare redemption receipt", () => {
 
     expect(receipt.payload).toMatchObject({
       jti: "D".repeat(43),
-      controller_cron: "0 23 * * *",
+      controller_cron: "30 0 * * *",
       controller_scheduled_time: SCHEDULED_TIME,
       target_date: "2026-07-14",
       ...GITHUB_CONTEXT,
@@ -65,7 +65,7 @@ describe("Cloudflare redemption receipt", () => {
     const { privateKeyJwk, publicKeyJwk } = await signingKeys();
     const assertion = await createAssertion({
       privateKeyJwk,
-      controllerCron: "0 23 * * *",
+      controllerCron: "30 0 * * *",
       scheduledTime: SCHEDULED_TIME,
       issuedAtMs: REDEEMED_AT,
       jti: "E".repeat(43),
@@ -93,7 +93,7 @@ it("creates and verifies receipts with the Node-exported Ed25519 JWK label", asy
   const { privateKeyJwk, publicKeyJwk } = await signingKeys();
   const assertion = await createAssertion({
     privateKeyJwk,
-    controllerCron: "0 23 * * *",
+    controllerCron: "30 0 * * *",
     scheduledTime: SCHEDULED_TIME,
     issuedAtMs: REDEEMED_AT,
     jti: "F".repeat(43),
