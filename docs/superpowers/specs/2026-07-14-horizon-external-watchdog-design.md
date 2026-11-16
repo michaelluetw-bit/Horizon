@@ -39,7 +39,7 @@ Previous schedule contract is superseded.
 
 Primary 的 on-time 驗收必須落在其窗口內。窗口外才出現的 <code>event=schedule</code> 仍是已投遞的 schedule run，Watchdog 不得因它晚到而再 dispatch；但它不可被記為準時 primary 成功證據。
 
-Watchdog 的窗口另受第 5 節的權威 <code>controller.scheduledTime</code> 與延遲 Gate 限制。對固定的 06:00 預定時間，實際 handler 開始時間若早於 <code>scheduled_time</code>，即使落在觀測窗口內仍為負延遲並 fail-closed。
+Watchdog 的窗口另受第 5 節的權威 <code>controller.scheduledTime</code> 與延遲 Gate 限制。對固定的 08:30 預定時間，實際 handler 開始時間若早於 <code>scheduled_time</code>，即使落在觀測窗口內仍為負延遲並 fail-closed。
 
 ### 3.1 <code>target_date</code> 與查詢半開區間
 
@@ -110,7 +110,7 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 
 若 <code>controller.cron</code> 不等於設定的 Watchdog cron，決策為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_CRON_MISMATCH</code>；不得查詢 GitHub runs、不得 dispatch、不得重試。
 
-<code>scheduled_time</code> 必須落在該 <code>target_date</code> 台北時間 06:00:00 的 ±5 分鐘窗口（含端點）內；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 05:55:00–06:05:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
+<code>scheduled_time</code> 必須落在該 <code>target_date</code> 台北時間 08:30:00 的 ±5 分鐘窗口（含端點）內；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 08:25:00–08:35:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
 
 <code>MAX_INVOCATION_LAG_MS</code> 固定為 <code>300000</code>。只有 <code>0 &lt;= invocation_delta_ms &lt;= 300000</code> 可繼續；負延遲或大於上限時為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_delta_ms == 300000</code> 仍屬有效。
 
@@ -222,7 +222,7 @@ Assertion 的固定識別值如下：
 
 <code>payload_sha256</code> 固定為移除該欄位後、以 UTF-8 RFC 8785 JCS canonical JSON 序列化 assertion payload 的小寫十六進位 SHA-256。JWS 簽章仍覆蓋包含 <code>payload_sha256</code> 的完整 payload。接收端必須同時驗證 JWS 與此 hash，不能只驗其中之一。
 
-<code>target_date</code> 只能由 <code>controller_scheduled_time</code> 轉換為 <code>Asia/Taipei</code> 日期。其時間必須落在該日期 06:00:00 的 ±300000 ms（含端點）內，且驗證時鐘必須滿足 <code>issued_at &lt;= now &lt; expires_at</code>；<code>controller_cron</code>、時區換算、日期、<code>issued_at</code>／<code>expires_at</code> 任一不符即拒絕。
+<code>target_date</code> 只能由 <code>controller_scheduled_time</code> 轉換為 <code>Asia/Taipei</code> 日期。其時間必須落在該日期 08:30:00 的 ±300000 ms（含端點）內，且驗證時鐘必須滿足 <code>issued_at &lt;= now &lt; expires_at</code>；<code>controller_cron</code>、時區換算、日期、<code>issued_at</code>／<code>expires_at</code> 任一不符即拒絕。
 
 ### 6.3 Cloudflare assertion 發行與 handoff state
 
