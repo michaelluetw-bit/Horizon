@@ -361,7 +361,7 @@ def test_daily_workflow_has_only_the_production_primary_schedule() -> None:
 def test_watchdog_has_only_the_production_fallback_schedule() -> None:
     config = (ROOT / "workers/horizon-watchdog/wrangler.jsonc").read_text(encoding="utf-8")
 
-    assert '"crons": ["30 0 * * *"]' in config
+    assert '"crons": ["0 4 * * *"]' in config
     assert '"0 22 * * *"' not in config
 
 

@@ -1,4 +1,4 @@
-export const WATCHDOG_CRON = "30 0 * * *";
+export const WATCHDOG_CRON = "0 4 * * *";
 export const MAX_INVOCATION_LAG_MS = 300_000;
 
 export function targetDateForTaipei(epochMilliseconds) {
@@ -14,14 +14,9 @@ export function targetDateForTaipei(epochMilliseconds) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function watchdogScheduledTime(targetDate) {
-  return Date.parse(`${targetDate}T08:30:00+08:00`);
-}
-
-function isInsideWatchdogObservationWindow(targetDate, epochMilliseconds) {
-  const startsAt = Date.parse(`${targetDate}T08:25:00+08:00`);
-  const endsAt = Date.parse(`${targetDate}T08:35:00+08:00`);
-  return epochMilliseconds >= startsAt && epochMilliseconds <= endsAt;
+export function isInsideWatchdogWindow(targetDate, epochMilliseconds) {
+  const expectedTime = Date.parse(`${targetDate}T12:00:00+08:00`);
+  return Math.abs(epochMilliseconds - expectedTime) <= MAX_INVOCATION_LAG_MS;
 }
 
 function rejected({ decision, reason, targetDate, invocationDeltaMs }) {
@@ -65,7 +60,7 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
   }
   const invocationDeltaMs = invocationStartedAt - scheduledTime;
 
-  if (Math.abs(scheduledTime - watchdogScheduledTime(targetDate)) > MAX_INVOCATION_LAG_MS) {
+  if (!isInsideWatchdogWindow(targetDate, scheduledTime)) {
     return rejected({
       decision: "CHECK_FAILED",
       reason: "WATCHDOG_SCHEDULE_TIME_INVALID",
@@ -83,7 +78,7 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
     });
   }
 
-  if (!isInsideWatchdogObservationWindow(targetDate, invocationStartedAt)) {
+  if (!isInsideWatchdogWindow(targetDate, invocationStartedAt)) {
     return rejected({
       decision: "STALE_SCHEDULED_INVOCATION",
       reason: "INVOCATION_TIME_INVALID",
