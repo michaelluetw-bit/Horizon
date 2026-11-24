@@ -1,5 +1,19 @@
-export const WATCHDOG_CRON = "0 4 * * *";
+export const WATCHDOG_PRIMARY_CRON = "30 20 * * *";
+export const WATCHDOG_RETRY_CRON = "0 4 * * *";
+export const WATCHDOG_CRON = WATCHDOG_PRIMARY_CRON;
+export const WATCHDOG_CRONS = Object.freeze([
+  WATCHDOG_PRIMARY_CRON,
+  WATCHDOG_RETRY_CRON,
+]);
+export const WATCHDOG_SCHEDULE_WINDOWS = Object.freeze({
+  [WATCHDOG_PRIMARY_CRON]: "04:30:00+08:00",
+  [WATCHDOG_RETRY_CRON]: "12:00:00+08:00",
+});
 export const MAX_INVOCATION_LAG_MS = 300_000;
+
+export function isApprovedWatchdogCron(controllerCron) {
+  return typeof controllerCron === "string" && Object.hasOwn(WATCHDOG_SCHEDULE_WINDOWS, controllerCron);
+}
 
 export function targetDateForTaipei(epochMilliseconds) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -14,8 +28,14 @@ export function targetDateForTaipei(epochMilliseconds) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-export function isInsideWatchdogWindow(targetDate, epochMilliseconds) {
-  const expectedTime = Date.parse(`${targetDate}T12:00:00+08:00`);
+export function isInsideWatchdogWindow(
+  targetDate,
+  epochMilliseconds,
+  controllerCron = WATCHDOG_CRON,
+) {
+  const taipeiTime = WATCHDOG_SCHEDULE_WINDOWS[controllerCron];
+  if (!taipeiTime) return false;
+  const expectedTime = Date.parse(`${targetDate}T${taipeiTime}`);
   return Math.abs(epochMilliseconds - expectedTime) <= MAX_INVOCATION_LAG_MS;
 }
 
@@ -41,7 +61,7 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
   }
   const targetDate = targetDateForTaipei(scheduledTime);
 
-  if (controllerCron !== WATCHDOG_CRON) {
+  if (!isApprovedWatchdogCron(controllerCron)) {
     return rejected({
       decision: "CHECK_FAILED",
       reason: "WATCHDOG_CRON_MISMATCH",
@@ -60,7 +80,7 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
   }
   const invocationDeltaMs = invocationStartedAt - scheduledTime;
 
-  if (!isInsideWatchdogWindow(targetDate, scheduledTime)) {
+  if (!isInsideWatchdogWindow(targetDate, scheduledTime, controllerCron)) {
     return rejected({
       decision: "CHECK_FAILED",
       reason: "WATCHDOG_SCHEDULE_TIME_INVALID",
@@ -78,7 +98,7 @@ export function validateScheduledInvocation({ controllerCron, scheduledTime, inv
     });
   }
 
-  if (!isInsideWatchdogWindow(targetDate, invocationStartedAt)) {
+  if (!isInsideWatchdogWindow(targetDate, invocationStartedAt, controllerCron)) {
     return rejected({
       decision: "STALE_SCHEDULED_INVOCATION",
       reason: "INVOCATION_TIME_INVALID",

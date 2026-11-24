@@ -10,6 +10,14 @@ function claimRequest(targetDate) {
   });
 }
 
+function releaseRequest(targetDate) {
+  return new Request("https://gate.internal/release", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ target_date: targetDate }),
+  });
+}
+
 function auditRequest(record) {
   return new Request("https://gate.internal/audit", {
     method: "POST",
@@ -29,6 +37,20 @@ describe("FallbackDayGate", () => {
     await expect(first.json()).resolves.toEqual({ state: "CLAIMED", target_date: "2026-07-14" });
     expect(second.status).toBe(409);
     await expect(second.json()).resolves.toEqual({ reason: "FALLBACK_DAY_ALREADY_CLAIMED" });
+  });
+
+  it("releases a claimed target date so a later scheduled window can retry", async () => {
+    const stub = env.FALLBACK_DAY_GATE.get(env.FALLBACK_DAY_GATE.idFromName("2026-07-15"));
+
+    const first = await stub.fetch(claimRequest("2026-07-15"));
+    expect(first.status).toBe(201);
+
+    const released = await stub.fetch(releaseRequest("2026-07-15"));
+    expect(released.status).toBe(200);
+    await expect(released.json()).resolves.toEqual({ state: "RELEASED", target_date: "2026-07-15" });
+
+    const retry = await stub.fetch(claimRequest("2026-07-15"));
+    expect(retry.status).toBe(201);
   });
 
   it("persists a sanitized scheduled decision and exposes it by exact target date", async () => {

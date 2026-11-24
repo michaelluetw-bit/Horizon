@@ -120,6 +120,30 @@ function validDispatchPayload(payload) {
   );
 }
 
+const MAX_DISPATCH_ERROR_MESSAGE_LENGTH = 200;
+const SENSITIVE_TOKEN_PATTERN =
+  /\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+[^\s]+)\b/gi;
+
+async function extractSanitizedDispatchErrorMessage(response) {
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+  if (typeof payload?.message !== "string") {
+    return null;
+  }
+  const sanitized = payload.message
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(SENSITIVE_TOKEN_PATTERN, "[REDACTED]")
+    .trim();
+  if (!sanitized) {
+    return null;
+  }
+  return sanitized.slice(0, MAX_DISPATCH_ERROR_MESSAGE_LENGTH);
+}
+
 export async function dispatchWatchdogFallback({ fetchImpl, token, targetDate, handoffId }) {
   const response = await fetchImpl(workflowDispatchUrl(), {
     method: "POST",
@@ -140,10 +164,19 @@ export async function dispatchWatchdogFallback({ fetchImpl, token, targetDate, h
   });
 
   if (response.status !== 200) {
+    if (response.status === 204) {
+      return {
+        decision: "DISPATCH_ACCEPTED_WITHOUT_PROVENANCE",
+        httpStatus: response.status,
+        mayRetry: false,
+      };
+    }
+    const errorMessage = await extractSanitizedDispatchErrorMessage(response);
     return {
-      decision: response.status === 204 ? "DISPATCH_ACCEPTED_WITHOUT_PROVENANCE" : "DISPATCH_FAILED",
+      decision: "DISPATCH_FAILED",
       httpStatus: response.status,
       mayRetry: false,
+      ...(errorMessage ? { errorMessage } : {}),
     };
   }
 

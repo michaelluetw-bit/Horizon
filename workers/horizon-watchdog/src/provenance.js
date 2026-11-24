@@ -1,6 +1,6 @@
 import { compatibleEd25519Jwk } from "./ed25519-jwk.js";
 
-import { isInsideWatchdogWindow, targetDateForTaipei, WATCHDOG_CRON } from "./contracts.js";
+import { isApprovedWatchdogCron, isInsideWatchdogWindow, targetDateForTaipei } from "./contracts.js";
 
 export const ASSERTION_ISSUER = "urn:horizon:cloudflare-watchdog:v1";
 export const ASSERTION_AUDIENCE = "urn:horizon:p0-b2r:redemption:v1";
@@ -63,7 +63,7 @@ async function sha256Hex(text) {
 
 function scheduleClaimsAreValid(payload) {
   if (
-    payload.controller_cron !== WATCHDOG_CRON ||
+    !isApprovedWatchdogCron(payload.controller_cron) ||
     !Number.isInteger(payload.controller_scheduled_time) ||
     typeof payload.target_date !== "string"
   ) {
@@ -72,7 +72,11 @@ function scheduleClaimsAreValid(payload) {
   const expectedTargetDate = targetDateForTaipei(payload.controller_scheduled_time);
   return (
     payload.target_date === expectedTargetDate &&
-    isInsideWatchdogWindow(expectedTargetDate, payload.controller_scheduled_time)
+    isInsideWatchdogWindow(
+      expectedTargetDate,
+      payload.controller_scheduled_time,
+      payload.controller_cron,
+    )
   );
 }
 

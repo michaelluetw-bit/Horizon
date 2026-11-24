@@ -2,6 +2,7 @@ export { FallbackDayGate } from "./fallback-day-gate.js";
 export { HandoffRegistry } from "./handoff-registry.js";
 
 import {
+  isApprovedWatchdogCron,
   MAX_INVOCATION_LAG_MS,
   validateScheduledInvocation,
   validateVerificationInvocation,
@@ -44,6 +45,12 @@ async function claimFallbackDay(env, targetDate) {
   throw new Error("FALLBACK_DAY_GATE_UNAVAILABLE");
 }
 
+async function releaseFallbackDay(env, targetDate) {
+  if (!env.FALLBACK_DAY_GATE) return;
+  const stub = env.FALLBACK_DAY_GATE.get(env.FALLBACK_DAY_GATE.idFromName(targetDate));
+  await stub.fetch(registryRequest("/release", { target_date: targetDate }));
+}
+
 const PUBLIC_AUDIT_FIELDS = [
   "configured_watchdog_schedule_expression",
   "trigger_schedule_expression",
@@ -57,6 +64,7 @@ const PUBLIC_AUDIT_FIELDS = [
   "execution_mode",
   "decision",
   "reason",
+  "error_message",
   "primary_run_id",
   "workflow_run_id",
   "run_url",
@@ -151,8 +159,11 @@ function watchdogAudit(
   executionMode,
 ) {
   const version = env.CF_VERSION_METADATA;
+  const configuredCron = isApprovedWatchdogCron(controller.cron)
+    ? controller.cron
+    : WATCHDOG_CRON;
   return {
-    configured_watchdog_schedule_expression: WATCHDOG_CRON,
+    configured_watchdog_schedule_expression: configuredCron,
     trigger_schedule_expression:
       typeof controller.cron === "string" ? controller.cron : null,
     scheduled_time: Number.isInteger(controller.scheduledTime)
@@ -182,6 +193,7 @@ function withWatchdogAudit(audit, outcome) {
   if (outcome.runUrl) result.run_url = outcome.runUrl;
   if (outcome.htmlUrl) result.html_url = outcome.htmlUrl;
   if (outcome.httpStatus) result.http_status = outcome.httpStatus;
+  if (outcome.errorMessage) result.error_message = outcome.errorMessage;
   return result;
 }
 
@@ -510,6 +522,13 @@ export async function evaluateScheduledInvocation({
     });
   }
   if (dispatch.decision !== "DISPATCH_CONFIRMED") {
+    if (
+      dispatch.decision === "DISPATCH_FAILED" &&
+      Number.isInteger(dispatch.httpStatus) &&
+      dispatch.httpStatus >= 400
+    ) {
+      await releaseFallbackDay(env, timing.targetDate).catch(() => {});
+    }
     return withWatchdogAudit(audit, {
       targetDate: timing.targetDate,
       scheduledTime: controller.scheduledTime,

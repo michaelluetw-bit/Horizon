@@ -139,6 +139,41 @@ def test_watchdog_evidence_rejects_receipt_context_mismatch_before_pr_creation(t
         )
 
 
+@pytest.mark.parametrize("controller_cron", ["30 20 * * *", "0 4 * * *"])
+def test_watchdog_evidence_accepts_both_approved_watchdog_crons(
+    tmp_path: Path, controller_cron: str
+) -> None:
+    write_complete_set(tmp_path)
+    provenance = watchdog_provenance()
+    provenance["trigger_schedule_expression"] = controller_cron
+    provenance["receipt"]["controller_cron"] = controller_cron  # type: ignore[index]
+
+    evidence = build_evidence(
+        root=tmp_path,
+        target_date=TARGET_DATE,
+        provenance=provenance,
+        workflow=workflow_context(),
+    )
+
+    assert evidence.manifest["trigger_schedule_expression"] == controller_cron
+    assert evidence.manifest["provenance"]["controller_cron"] == controller_cron
+
+
+def test_watchdog_evidence_rejects_unapproved_watchdog_cron(tmp_path: Path) -> None:
+    write_complete_set(tmp_path)
+    provenance = watchdog_provenance()
+    provenance["trigger_schedule_expression"] = "30 0 * * *"
+    provenance["receipt"]["controller_cron"] = "30 0 * * *"  # type: ignore[index]
+
+    with pytest.raises(EvidenceError, match="RECEIPT_CONTEXT_MISMATCH"):
+        build_evidence(
+            root=tmp_path,
+            target_date=TARGET_DATE,
+            provenance=provenance,
+            workflow=workflow_context(),
+        )
+
+
 def test_scheduled_verification_evidence_records_the_actual_nonprimary_cron(tmp_path: Path) -> None:
     write_complete_set(tmp_path)
 

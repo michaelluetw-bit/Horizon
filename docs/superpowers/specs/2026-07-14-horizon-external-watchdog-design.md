@@ -35,11 +35,12 @@ Previous schedule contract is superseded.
 | 路徑 | 權威排程 | UTC cron | 台北預定時間 | 有效窗口 |
 | --- | --- | --- | --- | --- |
 | Primary | GitHub Actions <code>schedule</code> | <code>17 20 * * *</code> | 04:17 | workflow 進入 preflight：04:12:00–04:22:00 |
-| Watchdog | Cloudflare Worker Cron | <code>0 4 * * *</code> | 12:00 | invocation 觀測窗口：11:55:00–12:05:00 |
+| Watchdog（清晨主觸發） | Cloudflare Worker Cron | <code>30 20 * * *</code> | 04:30 | invocation 觀測窗口：04:25:00–04:35:00 |
+| Watchdog（中午備援重試） | Cloudflare Worker Cron | <code>0 4 * * *</code> | 12:00 | invocation 觀測窗口：11:55:00–12:05:00 |
 
 Primary 的 on-time 驗收必須落在其窗口內。窗口外才出現的 <code>event=schedule</code> 仍是已投遞的 schedule run，Watchdog 不得因它晚到而再 dispatch；但它不可被記為準時 primary 成功證據。
 
-Watchdog 的窗口另受第 5 節的權威 <code>controller.scheduledTime</code> 與延遲 Gate 限制。對固定的 12:00 預定時間，實際 handler 開始時間若早於 <code>scheduled_time</code>，即使落在觀測窗口內仍為負延遲並 fail-closed。
+Watchdog 的窗口另受第 5 節的權威 <code>controller.scheduledTime</code> 與延遲 Gate 限制。對核准的 04:30 或 12:00 預定時間，實際 handler 開始時間若早於 <code>scheduled_time</code>，即使落在觀測窗口內仍為負延遲並 fail-closed。
 
 ### 3.1 <code>target_date</code> 與查詢半開區間
 
@@ -103,14 +104,14 @@ invocation_started_at       = handler 實際進入時間
 invocation_delta_ms         = invocation_started_at - scheduled_time
 ~~~
 
-- <code>trigger_schedule_expression</code> 必須精確等於設定的 <code>configured_watchdog_schedule_expression = "0 4 * * *"</code>。
+- <code>trigger_schedule_expression</code> 必須屬於核准的 Watchdog cron 集合：<code>30 20 * * *</code>（台北 04:30 清晨主觸發）或 <code>0 4 * * *</code>（台北 12:00 中午備援重試）。
 - <code>scheduled_time</code> 是 <code>controller.scheduledTime</code> 所提供的 UTC epoch milliseconds；可另記錄 ISO-8601 便於閱讀，但不得覆蓋原始值。
 - <code>invocation_started_at</code> 只代表 handler 實際進入時間，不是排定時間。
 - <code>target_date</code> 只能由 <code>new Date(controller.scheduledTime)</code> 轉成 <code>Asia/Taipei</code> 日期。
 
-若 <code>controller.cron</code> 不等於設定的 Watchdog cron，決策為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_CRON_MISMATCH</code>；不得查詢 GitHub runs、不得 dispatch、不得重試。
+若 <code>controller.cron</code> 不屬於核准的 Watchdog cron 集合，決策為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_CRON_MISMATCH</code>；不得查詢 GitHub runs、不得 dispatch、不得重試。
 
-<code>scheduled_time</code> 必須落在該 <code>target_date</code> 台北時間 12:00:00 的 ±5 分鐘窗口（含端點）內；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在 11:55:00–12:05:00 的台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
+<code>scheduled_time</code> 必須落在該 <code>target_date</code> 對應 cron 預定台北時間（<code>30 20 * * *</code> 為 04:30:00、<code>0 4 * * *</code> 為 12:00:00）的 ±5 分鐘窗口（含端點）內；不符時為 <code>CHECK_FAILED</code>、原因 <code>WATCHDOG_SCHEDULE_TIME_INVALID</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_started_at</code> 也必須落在同一對應的 ±5 分鐘台北觀測窗口內；窗口外為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。
 
 <code>MAX_INVOCATION_LAG_MS</code> 固定為 <code>300000</code>。只有 <code>0 &lt;= invocation_delta_ms &lt;= 300000</code> 可繼續；負延遲或大於上限時為 <code>STALE_SCHEDULED_INVOCATION</code>，零 GitHub read、零 dispatch、零重試。<code>invocation_delta_ms == 300000</code> 仍屬有效。
 
@@ -142,9 +143,9 @@ invocation_delta_ms         = invocation_started_at - scheduled_time
 
 | 情況 | 決策與行為 |
 | --- | --- |
-| 200 但 JSON 或 schema 不合格 | <code>DISPATCH_RESPONSE_INVALID</code>；保存可用 metadata，fail-closed，不 retry |
-| 204 No Content | <code>DISPATCH_ACCEPTED_WITHOUT_PROVENANCE</code>；不得宣稱成功或 provenance 成立，不 retry |
-| 其他非成功 response | <code>DISPATCH_FAILED</code>；保存可用 metadata，fail-closed，不 retry |
+| 200 但 JSON 或 schema 不合格 | <code>DISPATCH_RESPONSE_INVALID</code>；保存可用 metadata，fail-closed，保留當日 claim，不 retry |
+| 204 No Content | <code>DISPATCH_ACCEPTED_WITHOUT_PROVENANCE</code>；不得宣稱成功或 provenance 成立，保留當日 claim，不 retry |
+| 其他非成功 HTTP response（<code>status &gt;= 400</code>，例如 422/5xx） | <code>DISPATCH_FAILED</code>；保存去敏且截斷後的 GitHub API <code>error_message</code>（不暴露原始 response body 或 token），同次 invocation 不 retry，並釋放 <code>FallbackDayGate</code> claim 以允許中午備援排程補跑一次 |
 
 上述兩種「dispatch 可能已成立」狀態不得在同一次 invocation 再送一次 request，避免建立重複 run。它們只能等待後續人工或監控核對。
 
@@ -208,7 +209,7 @@ Assertion 的固定識別值如下：
 | <code>audience</code> | <code>urn:horizon:p0-b2r:redemption:v1</code> |
 | <code>repository</code> | <code>michaelluetw-bit/Horizon</code> |
 | <code>workflow_identifier</code> | <code>michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main</code> |
-| <code>controller_cron</code> | <code>0 4 * * *</code> |
+| <code>controller_cron</code> | <code>30 20 * * *</code> 或 <code>0 4 * * *</code> |
 | <code>controller_scheduled_time</code> | UTC epoch milliseconds，整數 |
 | <code>jti</code>／<code>one_time_nonce</code> | 同一值；32 個 CSPRNG bytes 的 base64url 編碼 |
 | <code>issued_at</code>／<code>expires_at</code> | UTC Unix seconds；<code>expires_at = issued_at + 900</code>，不得延展 |
@@ -222,7 +223,7 @@ Assertion 的固定識別值如下：
 
 <code>payload_sha256</code> 固定為移除該欄位後、以 UTF-8 RFC 8785 JCS canonical JSON 序列化 assertion payload 的小寫十六進位 SHA-256。JWS 簽章仍覆蓋包含 <code>payload_sha256</code> 的完整 payload。接收端必須同時驗證 JWS 與此 hash，不能只驗其中之一。
 
-<code>target_date</code> 只能由 <code>controller_scheduled_time</code> 轉換為 <code>Asia/Taipei</code> 日期。其時間必須落在該日期 12:00:00 的 ±300000 ms（含端點）內，且驗證時鐘必須滿足 <code>issued_at &lt;= now &lt; expires_at</code>；<code>controller_cron</code>、時區換算、日期、<code>issued_at</code>／<code>expires_at</code> 任一不符即拒絕。
+<code>target_date</code> 只能由 <code>controller_scheduled_time</code> 轉換為 <code>Asia/Taipei</code> 日期。其時間必須落在該日期對應 <code>controller_cron</code> 預定台北時間（04:30:00 或 12:00:00）的 ±300000 ms（含端點）內，且驗證時鐘必須滿足 <code>issued_at &lt;= now &lt; expires_at</code>；<code>controller_cron</code>、時區換算、日期、<code>issued_at</code>／<code>expires_at</code> 任一不符即拒絕。
 
 ### 6.3 Cloudflare assertion 發行與 handoff state
 

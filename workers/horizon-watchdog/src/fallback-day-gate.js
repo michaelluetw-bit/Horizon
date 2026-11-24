@@ -33,6 +33,9 @@ export class FallbackDayGate extends DurableObject {
     if (request.method === "POST" && url.pathname === "/claim") {
       return this.claim(request);
     }
+    if (request.method === "POST" && url.pathname === "/release") {
+      return this.release(request);
+    }
     if (request.method === "POST" && url.pathname === "/audit") {
       return this.storeAudit(request);
     }
@@ -64,6 +67,24 @@ export class FallbackDayGate extends DurableObject {
     return jsonResponse(
       { state: "CLAIMED", target_date: payload.target_date },
       201,
+    );
+  }
+
+  async release(request) {
+    const payload = await request.json().catch(() => null);
+    if (!TARGET_DATE_PATTERN.test(payload?.target_date ?? "")) {
+      return jsonResponse({ reason: "INVALID_REQUEST" }, 400);
+    }
+    const released = this.ctx.storage.transactionSync(() => {
+      const write = this.ctx.storage.sql.exec(
+        "DELETE FROM fallback_day_claim WHERE singleton = 1 AND target_date = ?",
+        payload.target_date,
+      );
+      return write.rowsWritten > 0;
+    });
+    return jsonResponse(
+      { state: released ? "RELEASED" : "NOT_CLAIMED", target_date: payload.target_date },
+      200,
     );
   }
 
