@@ -19,7 +19,10 @@ HORIZON_WORKFLOW_REF = (
     "michaelluetw-bit/Horizon/.github/workflows/horizon_daily.yml@refs/heads/main"
 )
 PRIMARY_CRON = "17 20 * * *"
-WATCHDOG_CRON = "0 4 * * *"
+WATCHDOG_PRIMARY_CRON = "30 20 * * *"
+WATCHDOG_RETRY_CRON = "0 4 * * *"
+WATCHDOG_CRON = WATCHDOG_PRIMARY_CRON
+WATCHDOG_CRONS = (WATCHDOG_PRIMARY_CRON, WATCHDOG_RETRY_CRON)
 PROVENANCE_MARKER = "horizon-provenance-v1"
 _MARKER_PATTERN = re.compile(r"<!-- horizon-provenance-v1:([A-Za-z0-9_-]+) -->")
 _JTI_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
@@ -247,8 +250,9 @@ def _validate_github_context(github: Any, workflow: Mapping[str, Any], event: An
 
 
 def _validate_receipt(receipt: Mapping[str, Any], target_date: str, workflow: Mapping[str, Any]) -> None:
+    if receipt.get("controller_cron") not in WATCHDOG_CRONS:
+        raise EvidenceError("RECEIPT_CONTEXT_MISMATCH")
     expected = {
-        "controller_cron": WATCHDOG_CRON,
         "target_date": target_date,
         "github_run_id": workflow["run_id"],
         "github_run_attempt": workflow["run_attempt"],

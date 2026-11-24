@@ -246,6 +246,96 @@ describe("evaluateScheduledInvocation", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(dayGateFetch).toHaveBeenCalledTimes(1);
   });
+
+  it("releases the day claim and records error_message when GitHub explicitly rejects dispatch with HTTP 422", async () => {
+    const signingKeyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const privateKeyJwk = await crypto.subtle.exportKey("jwk", signingKeyPair.privateKey);
+    const registryFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ state: "PENDING_DISPATCH" }), { status: 201 }),
+    );
+    const registry = {
+      idFromName: vi.fn(() => "handoff-object"),
+      get: vi.fn(() => ({ fetch: registryFetch })),
+    };
+    const dayGateFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ state: "CLAIMED", target_date: "2026-07-14" }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ state: "RELEASED", target_date: "2026-07-14" }), { status: 200 }));
+    const dayGate = {
+      idFromName: vi.fn(() => "day-object"),
+      get: vi.fn(() => ({ fetch: dayGateFetch })),
+    };
+    const morningScheduledTime = Date.parse("2026-07-13T20:30:00.000Z");
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message: "Workflow cannot be dispatched right now" }), { status: 422 }),
+      );
+
+    await expect(
+      evaluateScheduledInvocation({
+        controller: { cron: "30 20 * * *", scheduledTime: morningScheduledTime },
+        env: {
+          HANDOFF_REGISTRY: registry,
+          FALLBACK_DAY_GATE: dayGate,
+          HORIZON_GITHUB_TOKEN: "test-token",
+          HORIZON_ASSERTION_PRIVATE_KEY_JWK: JSON.stringify(privateKeyJwk),
+        },
+        invocationStartedAt: morningScheduledTime + 500,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({
+      decision: "DISPATCH_FAILED",
+      http_status: 422,
+      error_message: "Workflow cannot be dispatched right now",
+      configured_watchdog_schedule_expression: "30 20 * * *",
+      trigger_schedule_expression: "30 20 * * *",
+      target_date: "2026-07-14",
+    });
+    expect(dayGateFetch).toHaveBeenCalledTimes(2);
+    expect(new URL(dayGateFetch.mock.calls[0][0].url).pathname).toBe("/claim");
+    expect(new URL(dayGateFetch.mock.calls[1][0].url).pathname).toBe("/release");
+  });
+
+  it("keeps the day claim locked when GitHub returns 204 without provenance", async () => {
+    const signingKeyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+    const privateKeyJwk = await crypto.subtle.exportKey("jwk", signingKeyPair.privateKey);
+    const registryFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ state: "PENDING_DISPATCH" }), { status: 201 }),
+    );
+    const registry = {
+      idFromName: vi.fn(() => "handoff-object"),
+      get: vi.fn(() => ({ fetch: registryFetch })),
+    };
+    const dayGate = availableDayGate();
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ total_count: 0, workflow_runs: [] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(
+      evaluateScheduledInvocation({
+        controller: { cron: "0 4 * * *", scheduledTime: SCHEDULED_TIME },
+        env: {
+          HANDOFF_REGISTRY: registry,
+          FALLBACK_DAY_GATE: dayGate.binding,
+          HORIZON_GITHUB_TOKEN: "test-token",
+          HORIZON_ASSERTION_PRIVATE_KEY_JWK: JSON.stringify(privateKeyJwk),
+        },
+        invocationStartedAt: SCHEDULED_TIME,
+        fetchImpl,
+      }),
+    ).resolves.toMatchObject({
+      decision: "DISPATCH_ACCEPTED_WITHOUT_PROVENANCE",
+      http_status: 204,
+      target_date: "2026-07-14",
+    });
+    expect(dayGate.fetch).toHaveBeenCalledTimes(1);
+    expect(new URL(dayGate.fetch.mock.calls[0][0].url).pathname).toBe("/claim");
+  });
 });
 
 describe("handleHandoffRequest", () => {

@@ -156,6 +156,53 @@ describe("Cloudflare provenance assertion", () => {
       }),
     ).resolves.toEqual({ accepted: false, reason: "ASSERTION_SCHEDULE_TIME_INVALID" });
   });
+
+  it("signs and verifies an assertion for the 04:30 Taipei primary watchdog cron", async () => {
+    const { privateKeyJwk, publicKeyJwk } = await signingKeys();
+    const morningScheduledTime = Date.parse("2026-07-13T20:30:00.000Z");
+    const morningIssuedAt = Date.parse("2026-07-13T20:30:30.000Z");
+
+    const assertion = await createAssertion({
+      privateKeyJwk,
+      controllerCron: "30 20 * * *",
+      scheduledTime: morningScheduledTime,
+      issuedAtMs: morningIssuedAt,
+      jti: "H".repeat(43),
+    });
+
+    expect(assertion.payload).toMatchObject({
+      controller_cron: "30 20 * * *",
+      controller_scheduled_time: morningScheduledTime,
+      target_date: "2026-07-14",
+    });
+
+    await expect(
+      verifyAssertion({
+        jws: assertion.jws,
+        publicKeyJwk,
+        nowMs: morningIssuedAt + 1,
+      }),
+    ).resolves.toMatchObject({ accepted: true, payload: assertion.payload });
+  });
+
+  it("rejects an assertion whose cron does not match its scheduled time window", async () => {
+    const { privateKeyJwk, publicKeyJwk } = await signingKeys();
+    const assertion = await createAssertion({
+      privateKeyJwk,
+      controllerCron: "30 20 * * *",
+      scheduledTime: SCHEDULED_TIME,
+      issuedAtMs: ISSUED_AT,
+      jti: "I".repeat(43),
+    });
+
+    await expect(
+      verifyAssertion({
+        jws: assertion.jws,
+        publicKeyJwk,
+        nowMs: ISSUED_AT + 1,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "ASSERTION_SCHEDULE_TIME_INVALID" });
+  });
 });
 
 it("signs and verifies with the Node-exported Ed25519 JWK label", async () => {

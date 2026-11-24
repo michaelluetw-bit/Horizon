@@ -15,21 +15,47 @@ describe("validateScheduledInvocation", () => {
     })).toMatchObject({ accepted: false, reason: "WATCHDOG_CRON_MISMATCH" });
   });
 
-  it("uses Cloudflare scheduledTime to derive the Taipei target date", () => {
-    const scheduledTime = Date.parse("2026-07-14T04:00:00.000Z");
+  it.each([
+    ["04:30 Taipei primary", "30 20 * * *", "2026-07-13T20:30:00.000Z"],
+    ["12:00 Taipei retry", "0 4 * * *", "2026-07-14T04:00:00.000Z"],
+  ])(
+    "uses Cloudflare scheduledTime to derive the Taipei target date for %s",
+    (_label, controllerCron, timestamp) => {
+      const scheduledTime = Date.parse(timestamp);
+
+      expect(
+        validateScheduledInvocation({
+          controllerCron,
+          scheduledTime,
+          invocationStartedAt: scheduledTime + 300_000,
+        }),
+      ).toEqual({
+        accepted: true,
+        decision: "READY",
+        mayQueryGithub: true,
+        targetDate: "2026-07-14",
+        invocationDeltaMs: 300_000,
+      });
+    },
+  );
+
+  it.each([
+    ["04:30 cron fired at noon", "30 20 * * *", "2026-07-14T04:00:00.000Z"],
+    ["12:00 cron fired at 04:30", "0 4 * * *", "2026-07-13T20:30:00.000Z"],
+  ])("rejects cross-window mismatch (%s)", (_label, controllerCron, timestamp) => {
+    const scheduledTime = Date.parse(timestamp);
 
     expect(
       validateScheduledInvocation({
-        controllerCron: "0 4 * * *",
+        controllerCron,
         scheduledTime,
-        invocationStartedAt: scheduledTime + 300_000,
+        invocationStartedAt: scheduledTime,
       }),
-    ).toEqual({
-      accepted: true,
-      decision: "READY",
-      mayQueryGithub: true,
-      targetDate: "2026-07-14",
-      invocationDeltaMs: 300_000,
+    ).toMatchObject({
+      accepted: false,
+      decision: "CHECK_FAILED",
+      reason: "WATCHDOG_SCHEDULE_TIME_INVALID",
+      mayQueryGithub: false,
     });
   });
 

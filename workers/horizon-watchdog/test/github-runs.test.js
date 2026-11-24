@@ -175,6 +175,50 @@ describe("dispatchWatchdogFallback", () => {
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+
+  it("captures a sanitized GitHub JSON error message on HTTP 422 without leaking tokens", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: "Workflow failed\nwith token ghp_secret1234567890",
+        }),
+        { status: 422, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      dispatchWatchdogFallback({
+        fetchImpl,
+        token: "test-token",
+        targetDate: "2026-07-14",
+        handoffId: "test-jti",
+      }),
+    ).resolves.toEqual({
+      decision: "DISPATCH_FAILED",
+      httpStatus: 422,
+      mayRetry: false,
+      errorMessage: "Workflow failed with token [REDACTED]",
+    });
+  });
+
+  it("omits raw non-JSON response bodies on dispatch failure", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response("<html>internal gateway error</html>", { status: 502 }),
+    );
+
+    await expect(
+      dispatchWatchdogFallback({
+        fetchImpl,
+        token: "test-token",
+        targetDate: "2026-07-14",
+        handoffId: "test-jti",
+      }),
+    ).resolves.toEqual({
+      decision: "DISPATCH_FAILED",
+      httpStatus: 502,
+      mayRetry: false,
+    });
+  });
 });
 
 describe("decidePrimaryRuns", () => {
