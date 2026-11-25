@@ -332,8 +332,9 @@ def test_sync_reports_origin_fetch_failure(tmp_path: Path) -> None:
 
 def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     canonical = (ROOT / ".github/workflows/horizon_daily.yml").read_text(encoding="utf-8")
-    deployment = (ROOT / ".github/workflows/daily-summary.yml").read_text(encoding="utf-8")
+    deployment = (ROOT / ".github/workflows/deploy-docs.yml").read_text(encoding="utf-8")
 
+    assert not (ROOT / ".github/workflows/daily-summary.yml").exists()
     assert "cron: '17 20 * * *'" in canonical
     assert "cron: '17 0 * * *'" not in canonical
     assert "cron: '0 0 * * *'" not in canonical
@@ -342,6 +343,7 @@ def test_only_horizon_daily_can_run_horizon_on_a_schedule() -> None:
     assert "uv run horizon --hours 24" in canonical
     assert 'uv run horizon --hours 24 --target-date "$TARGET_DATE"' in canonical
     assert "cp data/config.github.json data/config.json" in canonical
+    assert "workflow_dispatch:" in deployment
     assert "schedule:" not in deployment
     assert "uv run horizon" not in deployment
     assert "git commit" not in deployment
