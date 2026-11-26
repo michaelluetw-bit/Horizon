@@ -23,6 +23,7 @@ try:
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     PLAYWRIGHT_AVAILABLE = False
+    async_playwright = None  # type: ignore[misc,assignment]
     Stealth = None  # type: ignore[misc,assignment]
 
 
