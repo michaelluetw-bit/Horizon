@@ -10,6 +10,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.policy import default
 from email.utils import parseaddr
 from typing import List
 
@@ -34,6 +35,63 @@ _NO_REPLY_PATTERNS = re.compile(
 _MAX_SUBSCRIBERS = 500
 
 logger = logging.getLogger(__name__)
+
+# The summarizer HTML-escapes untrusted text and then Markdown-escapes it,
+# which turns "&#x27;" into "&\#x27;". These helpers undo that once for email.
+_ESCAPED_ENTITY_RE = re.compile(r"&\\#(x?[0-9A-Fa-f]+);")
+_MARKDOWN_BACKSLASH_RE = re.compile(r"\\([\\`*_{}\[\]()<>#!|+.-])")
+_LIST_ITEM = r"[ \t]*(?:\d+[.)]|[-*+])[ \t]"
+_LIST_AFTER_TEXT_RE = re.compile(rf"(?m)^((?!{_LIST_ITEM}).*\S.*)\n(?={_LIST_ITEM})")
+
+
+def _escape_email_text(value: str) -> str:
+    """Block raw HTML without escaping the summarizer's entities a second time.
+
+    Escaping < is enough to stop raw HTML. Existing entities such as &#x27;
+    are left for Markdown to pass through, and bare & is escaped by Markdown.
+    > is left alone so the app's own blockquotes still work; untrusted text
+    reaches here as &gt;, so it can't start one. Python-Markdown doesn't treat
+    \\| as an escape, so it is unescaped to avoid a stray backslash.
+    """
+    return value.replace("<", "&lt;").replace("\\|", "|")
+
+
+def _prepare_email_markdown(value: str) -> str:
+    """Make summary Markdown render cleanly, and safely, as email HTML.
+
+    Summary text is already HTML-escaped by the summarizer, so escaping it
+    again here showed entities such as &#x27; and &quot; in the email.
+    """
+    value = _ESCAPED_ENTITY_RE.sub(r"&#\1;", value)
+    # Python-Markdown needs a blank line before a list that follows text.
+    return _LIST_AFTER_TEXT_RE.sub(r"\1\n\n", _escape_email_text(value))
+
+
+if markdown is not None:
+    class _EmailCodeInlineProcessor(markdown.inlinepatterns.BacktickInlineProcessor):
+        """Decode summary text only after Markdown identifies a real code span."""
+
+        def handleMatch(self, match, data):
+            element, start, end = super().handleMatch(match, data)
+            # Read the code text from the element, not match.group(3):
+            # Python-Markdown 3.11 changed BACKTICK_RE and dropped that group.
+            if getattr(element, "tag", None) == "code" and element.text:
+                raw = (
+                    element.text.replace("&lt;", "<")
+                    .replace("&gt;", ">")
+                    .replace("&amp;", "&")
+                )
+                code = html.unescape(_MARKDOWN_BACKSLASH_RE.sub(r"\1", raw))
+                element.text = markdown.util.AtomicString(markdown.util.code_escape(code))
+            return element, start, end
+
+
+def _render_email_markdown(value: str) -> str:
+    parser = markdown.Markdown()
+    parser.inlinePatterns.register(
+        _EmailCodeInlineProcessor(markdown.inlinepatterns.BACKTICK_RE), "backtick", 190
+    )
+    return parser.convert(value)
 
 
 def _is_valid_subscriber_email(addr: str) -> bool:
@@ -66,18 +124,28 @@ class EmailManager:
         if not self.config.enabled or not self.config.imap_enabled:
             return
 
+        mail = None
+        mailbox_selected = False
         try:
             mail = imaplib.IMAP4_SSL(self.config.imap_server, self.config.imap_port)
             mail.login(self.config.email_address, self.pwd)
-            mail.select("INBOX")
+            status, _ = mail.select("INBOX")
+            mailbox_selected = status == "OK"
+
+            sub_ids = self._search_request_ids(mail, self.config.subscribe_keyword)
+            # Find both request types before RFC822 fetches mark overlapping matches as seen.
+            unsub_ids = self._search_request_ids(mail, self.config.unsubscribe_keyword)
 
             subscribers = storage_manager.load_subscribers()
 
-            for email_addr in self._collect_request_senders(mail, self.config.subscribe_keyword):
+            for email_addr in self._collect_senders_for_ids(
+                mail, self.config.subscribe_keyword, sub_ids
+            ):
                 if len(subscribers) >= _MAX_SUBSCRIBERS:
                     logger.warning(
                         "Max subscriber limit (%d) reached, skipping %s",
-                        _MAX_SUBSCRIBERS, email_addr,
+                        _MAX_SUBSCRIBERS,
+                        email_addr,
                     )
                     continue
                 if email_addr not in subscribers:
@@ -92,7 +160,9 @@ class EmailManager:
                 else:
                     logger.info(f"Already subscribed: {email_addr}")
 
-            for email_addr in self._collect_request_senders(mail, self.config.unsubscribe_keyword):
+            for email_addr in self._collect_senders_for_ids(
+                mail, self.config.unsubscribe_keyword, unsub_ids
+            ):
                 if email_addr in subscribers:
                     storage_manager.remove_subscriber(email_addr)
                     subscribers = storage_manager.load_subscribers()
@@ -105,33 +175,57 @@ class EmailManager:
                 else:
                     logger.info(f"Not subscribed: {email_addr}")
 
-            mail.close()
-            mail.logout()
-
         except Exception as e:
             logger.error(f"Error checking subscriptions: {e}")
+        finally:
+            if mail is not None:
+                if mailbox_selected:
+                    try:
+                        mail.close()
+                    except Exception as e:
+                        logger.debug(
+                            "Could not close IMAP mailbox (%s)", type(e).__name__
+                        )
+                try:
+                    mail.logout()
+                except Exception as e:
+                    logger.debug(
+                        "Could not log out of IMAP connection (%s)", type(e).__name__
+                    )
 
     @staticmethod
-    def _collect_request_senders(mail, keyword: str) -> List[str]:
-        """Return validated sender addresses for matching subscription requests."""
+    def _search_request_ids(mail, keyword: str) -> List[bytes]:
+        """Return matching unseen message IDs for a subscription keyword."""
         safe_keyword = keyword.replace("\\", "\\\\").replace('"', '\\"')
         status, messages = mail.search(None, f'(UNSEEN SUBJECT "{safe_keyword}")')
         if status != "OK" or not messages[0]:
             return []
+        return messages[0].split()
 
+    @staticmethod
+    def _collect_senders_for_ids(
+        mail, keyword: str, message_ids: List[bytes]
+    ) -> List[str]:
+        """Return validated sender addresses for fetched subscription requests."""
         addresses: List[str] = []
-        for message_id in messages[0].split():
+        for message_id in message_ids:
             _, message_data = mail.fetch(message_id, "(RFC822)")
             for part in message_data:
                 if not isinstance(part, tuple):
                     continue
-                message = email.message_from_bytes(part[1])
+                message = email.message_from_bytes(part[1], policy=default)
                 if str(message.get("Subject") or "").strip().upper() != keyword.upper():
                     continue
                 _, address = parseaddr(message.get("From") or "")
                 if address and _is_valid_subscriber_email(address):
                     addresses.append(address)
         return addresses
+
+    @classmethod
+    def _collect_request_senders(cls, mail, keyword: str) -> List[str]:
+        """Return validated sender addresses for matching subscription requests."""
+        message_ids = cls._search_request_ids(mail, keyword)
+        return cls._collect_senders_for_ids(mail, keyword, message_ids)
 
     def _open_smtp(self) -> smtplib.SMTP:
         """Open an implicit TLS or STARTTLS SMTP connection."""
@@ -157,13 +251,9 @@ class EmailManager:
             return
 
         cleaned_summary = clean_app_summary_markdown(summary_md)
-        safe_summary = html.escape(cleaned_summary)
-        # html.escape protects against HTML injection from scraped content,
-        # but it also mangles Markdown blockquote markers at line starts;
-        # restore those so quotes still render.
-        safe_summary = re.sub(r"(?m)^([ \t]*)&gt; ", r"\1> ", safe_summary)
+        safe_summary = _prepare_email_markdown(cleaned_summary)
         html_content = (
-            markdown.markdown(safe_summary)
+            _render_email_markdown(safe_summary)
             if markdown
             else f"<pre>{safe_summary}</pre>"
         )
